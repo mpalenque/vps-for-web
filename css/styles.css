@@ -1,0 +1,105 @@
+* {
+    margin: 0;
+    padding: 0;
+    box-sizing: border-box;
+}
+
+html,
+body {
+    font-family: 'Helvetica', sans-serif;
+    background: #000;
+    position: relative;
+    width: 100%;
+    height: 100%;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+}
+
+#container {
+    position: relative;
+    width: 100vw;
+    height: 100vh;
+    display: block;
+    overflow: hidden;
+    line-height: 0;
+}
+
+#container > * {
+    position: absolute;
+    display: block;
+    user-select: none;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    animation: fadeIn 1.2s;
+}
+
+canvas {
+    display: block;
+    position: absolute;
+    top: 0;
+    left: 0;
+}
+
+#renderCanvas {
+    width: 100%;
+    height: 100%;
+    margin: auto;
+    outline: none;
+}
+
+#container > video {
+    object-fit: cover;
+    object-position: 50% 50%;
+}
+
+#permButton {
+    position: absolute;
+    left: 16px;
+    top: 16px;
+    width: 150px;
+    height: 32px;
+    font-weight: bold;
+    font-size: 13pt;
+    z-index: 100;
+    touch-action: manipulation;
+}
+
+#locButton {
+    position: absolute;
+    left: 16px;
+    bottom: 16px;
+    width: 150px;
+    height: 32px;
+    font-weight: bold;
+    font-size: 13pt;
+    z-index: 100;
+    touch-action: manipulation;
+}
+
+#locServerButton {
+    position: absolute;
+    right: 16px;
+    bottom: 16px;
+    width: 186px;
+    height: 32px;
+    font-weight: bold;
+    font-size: 13pt;
+    z-index: 100;
+    touch-action: manipulation;
+}
+
+#latlon {
+    position: absolute;
+    left: 16px;
+    right: 16px;
+    bottom: 64px;
+    height: 32px;
+    font-size: 13pt;
+    z-index: 100;
+    touch-action: manipulation;
+    color: #fff;
+    text-align: center;
+}
