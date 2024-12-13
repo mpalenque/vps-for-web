@@ -18,8 +18,7 @@ This is a sample of how to use Immersal's Visual Positioning System (VPS) for on
 
 - iOS Safari
 - Android Chrome
-- etc., latest versions
-- should work on all modern mobile browsers, [contact us](mailto:support@immersal.com) if it doesn't
+- etc., latest versions -- should work on all modern mobile browsers, [contact us](mailto:support@immersal.com) if it doesn't
 
 ## Prerequisites
 
