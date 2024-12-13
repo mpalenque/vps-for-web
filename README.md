@@ -25,6 +25,10 @@ This is a sample of how to use Immersal's Visual Positioning System (VPS) for on
 - [Immersal Developer account](https://developer.immersal.com/)
 - [Immersal Pro plan subscription](https://developer.immersal.com/pricing/)
 
+## Usage
+
+- Make a copy of `js/imConfig_template.js` as `js/imConfig.js` and enter your developer token and map ID(s)
+
 ## Future improvements
 
 - Common API to replace "SLAM tracking" with other tracking implementations (native Android Chrome WebXR/ARCore, App Clips, Zappar World Tracking, 8th Wall World Tracking, etc.)
