@@ -28,8 +28,8 @@ This is a sample of how to use Immersal's Visual Positioning System (VPS) for on
 
 ## Future improvements
 
-- Common API to replace "SLAM tracking" with other tracking implementations (native Android Chrome WebXR/ARCore, Zappar World Tracking, 8th Wall World Tracking, etc.)
-- Accuracy and speed
+- Common API to replace "SLAM tracking" with other tracking implementations (native Android Chrome WebXR/ARCore, App Clips, Zappar World Tracking, 8th Wall World Tracking, etc.)
+- Accuracy, speed, and size
 
 ## Notes
 
