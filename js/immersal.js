@@ -7,6 +7,7 @@ trackerPluginModule().then(instance => {
   Module = instance;
   console.log(`[IMMERSAL] TrackerPlugin init`);
 
+  window.updateKalmanParameters = Module.cwrap('updateKalmanParameters', null, ['number', 'number', 'number', 'number']);
   window.icvPosePut = Module.cwrap('icvPosePut', 'number', ['number', 'array', 'array']);
   window.icvPoseGet = Module.cwrap('icvPoseGet', 'number', ['number', 'number', 'number']);
   window.icvReset = Module.cwrap('icvReset', null, []);
@@ -51,10 +52,22 @@ class Immersal extends EventTarget {
   deviceData;
   developerToken;
   mapIds;
-  continuousLocalization;
   continuousInterval;
   imageDownScale = 0.25;
   solverType = 0;
+
+  get continuousLocalization() {
+    return this.#continuousLocalization;
+  }
+  set continuousLocalization(val) {
+    if (val) {
+      Immersal.#locWorker.addEventListener("message", this.handleLocWorkerEvent);
+    } else {
+      Immersal.#locWorker.removeEventListener("message", this.handleLocWorkerEvent);
+    }
+    this.localization.localizing = false;
+    this.#continuousLocalization = val;
+  }
 
   localization = {
     localizing: false,
@@ -97,11 +110,14 @@ class Immersal extends EventTarget {
     }
   };
 
+  #continuousLocalization = true;
   #focalLenConfidence = 0;
   #hasGyro = false;
   #angle = 0;
   #pos = new Float32Array(3);
   #rot = new Float32Array(4);
+  #P = new Float32Array(3);
+  #R = new Float32Array(4);
   #Q = new Quaternion(0, 0, 0, 1);
   #axisRot = new Quaternion(0, 0, 0, 1);
 
@@ -175,7 +191,7 @@ class Immersal extends EventTarget {
 
     return new Promise((resolve, reject) => {
       const onCameraReady = (camera) => {
-        container.appendChild(camera.el);
+        container.insertBefore(camera.el, container.firstChild);
         console.log(`[IMMERSAL] Using camera: ${camera.cameraLabel} (${camera.cameraId})`);
         params.container = container;
         params.camera = camera;
@@ -225,6 +241,9 @@ class Immersal extends EventTarget {
   constructor(params) {
     super();
     const {container, camera, deviceData, developerToken, mapIds, continuousLocalization, continuousInterval, solverType, imageDownScale} = params
+    
+    this.#addEventListeners();
+
     this.container = container;
     this.camera = camera;
     this.deviceData = deviceData;
@@ -241,7 +260,6 @@ class Immersal extends EventTarget {
       this.#axisRot.rotateZ(Math.PI);
     }
   
-    this.#addEventListeners();
     this.#initVideo();
   }
 
@@ -252,6 +270,11 @@ class Immersal extends EventTarget {
     this.camera.el.style.height = size.height + "px";
     this.camera.el.width = size.width;
     this.camera.el.height = size.height;
+
+    if (typeof BABYLON !== "undefined") {
+      this.camera.el.style.left = size.x + "px";
+      this.camera.el.style.top = size.y + "px";
+    }
 
     this.#resetLocalization();
     console.log(`[IMMERSAL] Video resized`);
@@ -396,19 +419,27 @@ class Immersal extends EventTarget {
     q3.multiply(q1);
     q3.multiply(q0);
 
-//    this.gyroData.set(q3.z, q3.w, -q3.x, -q3.y);
+    if (typeof BABYLON !== "undefined") {
+      q3.y = -q3.y;
+      q3.w = -q3.w;
+    }
+
     this.gyroData.set(q3.x, q3.y, q3.z, q3.w);
   }
 
   #addEventListeners() {
-    window.addEventListener("deviceorientation", (e) => { this.#handleOrientation(e); }, true);
-    window.addEventListener("resize", (e) => { this.#handleResize(e); });
-    window.addEventListener("focus", (e) => { this.#handleFocus(e); });
+    this.handleLocWorkerEvent = this.#handleLocWorkerEvent.bind(this);
+    this.handleOrientation = this.#handleOrientation.bind(this);
+    this.handleResize = this.#handleResize.bind(this);
+    this.handleFocus = this.#handleFocus.bind(this);
+    this.handleScreenOrientationChange = this.#handleScreenOrientationChange.bind(this);
+
+    window.addEventListener("deviceorientation", this.handleOrientation);
+    window.addEventListener("resize", this.handleResize);
+    window.addEventListener("focus", this.handleFocus);
 
     this.#angle = screen.orientation.angle || 0;
-    screen.orientation.addEventListener("change", (e) => { this.#handleScreenOrientationChange(e); });
-
-    Immersal.#locWorker.addEventListener("message", (e) => { this.#handleLocWorkerEvent(e); });
+    screen.orientation.addEventListener("change", this.handleScreenOrientationChange);
   }
 
   getPngData() {
@@ -439,10 +470,12 @@ class Immersal extends EventTarget {
     this.#pos.set( Module.HEAPF32.subarray(ptrPos >> 2, (ptrPos >> 2) + this.#pos.length) );
     this.#rot.set( Module.HEAPF32.subarray(ptrRot >> 2, (ptrRot >> 2) + this.#rot.length) );
 
+    const pose = {position: Array.from(this.#pos), rotation: Array.from(this.#rot)};
+
     Module._free(ptrRot);
     Module._free(ptrPos);
 
-    return {position: this.#pos, rotation: this.#rot};
+    return pose;
   }
 
   loadMap(mapId) {
@@ -534,19 +567,22 @@ class Immersal extends EventTarget {
 
   #handleLocalize(data) {
     const {r, pos, rot, time, focalLength, wgs84} = data;
+
+    const now = performance.now();
   
     this.localizeInfo.handle = r;
-    this.localizeInfo.elapsedTime = (performance.now() - time) / 1000;
+    this.localizeInfo.elapsedTime = now - time;
 
     const success = (r >= 0) ? true : false;
 
     if (!this.continuousLocalization) {
-      console.log(`[IMMERSAL] Localized in [${this.localizeInfo.elapsedTime}] seconds, success: [${success}]`);
+      console.log(`[IMMERSAL] Localized in [${0.001 * this.localizeInfo.elapsedTime}] seconds, success: [${success}]`);
     }
 
     if (success) {
       if (this.#focalLenConfidence !== 1) {
         window.icvFocalLenPut(focalLength);
+        this.cameraData.intrinsics.fx = this.cameraData.intrinsics.fy = window.icvFocalLenGet();
 
         if (window.icvFocalLenEstimateCount() >= Immersal.#FOCAL_LEN_CONFIDENCE_THRESHOLD) {
           this.cameraData.intrinsics.fx = this.cameraData.intrinsics.fy = window.icvFocalLenGet();
@@ -554,23 +590,23 @@ class Immersal extends EventTarget {
           this.#focalLenConfidence = 1;
         }
       }
-  
+
       this.#Q.set(rot[0], rot[1], rot[2], rot[3]);
       this.#Q.multiply(this.#axisRot);
 
-      const gyro = this.localization.lastGyro;
+      const gyro = this.localization.lastGyro.clone();
       gyro.invert();
       this.#Q.multiply(gyro);
 
-      this.#pos.set(pos);
-      this.#rot.set(Object.values(this.#Q));
+      this.#P.set(pos);
+      this.#R.set(Object.values(this.#Q));
 
-      window.icvPosePut(time, new Uint8Array(this.#pos.buffer), new Uint8Array(this.#rot.buffer));
+      window.icvPosePut(time, new Uint8Array(this.#P.buffer), new Uint8Array(this.#R.buffer));
 
-      this.localizeInfo.position.x = this.#pos[0];
-      this.localizeInfo.position.y = this.#pos[1];
-      this.localizeInfo.position.z = this.#pos[2];
-      this.localizeInfo.rotation.set(this.#rot[0], this.#rot[1], this.#rot[2], this.#rot[3]);
+      this.localizeInfo.position.x = pos[0];
+      this.localizeInfo.position.y = pos[1];
+      this.localizeInfo.position.z = pos[2];
+      this.localizeInfo.rotation.set(this.#Q.x, this.#Q.y, this.#Q.z, this.#Q.w);
   
       if (wgs84) {
         this.localizeInfo.wgs84.latitude = wgs84[0];
@@ -585,9 +621,6 @@ class Immersal extends EventTarget {
   }
 
   #handleLocWorkerEvent(e) {
-    if (!this.continuousLocalization)
-      return;
-    
     const {type, data} = e.data;
 
     if (type === "Localize") {
@@ -642,8 +675,10 @@ class Immersal extends EventTarget {
 
     if (!this.cameraData.buffer) return;
 
+    const intr = Object.values(this.cameraData.intrinsics);
+
     if (this.#focalLenConfidence !== 1) {
-      this.cameraData.intrinsics.fx = this.cameraData.intrinsics.fy = 0.0;
+      intr[0] = intr[1] = 0.0;
     }
 
     Immersal.#locWorker.postMessage({
@@ -652,7 +687,7 @@ class Immersal extends EventTarget {
         this.cameraData.width, 
         this.cameraData.height, 
         this.cameraData.channels, 
-        Object.values(this.cameraData.intrinsics), 
+        intr,
         this.cameraData.buffer, 
         time, 
         this.solverType, 
@@ -682,9 +717,7 @@ class Immersal extends EventTarget {
           const {type, data} = e.data;
           
           if (type === "Localize") {
-            if (!this.continuousLocalization) {
-              this.#handleLocalize(data);
-            }
+            this.#handleLocalize(data);
 
             if (this.localizeInfo.handle >= 0) {
               resolve(this.localizeInfo);
@@ -694,12 +727,14 @@ class Immersal extends EventTarget {
           }
         }, {once: true});
         Immersal.#locWorker.addEventListener("error", (e) => {
+          this.localization.localizing = false;
           reject(e);
         }, {once: true});
 
         this.localizeDevice(performance.now());
       } catch (e) {
         console.log(`[IMMERSAL] localizeDeviceAsync: Error:`, e);
+        this.localization.localizing = false;
         reject(e);
       }
     });
@@ -730,6 +765,7 @@ class Immersal extends EventTarget {
         this.cameraData.buffer = this.camera?.getImageData(this.imageDownScale);
 
         if (!this.cameraData.buffer) {
+          this.localization.localizing = false;
           reject("[IMMERSAL] Cannot obtain camera data");
           return;
         }
@@ -755,6 +791,7 @@ class Immersal extends EventTarget {
             fetch(Immersal.BASE_URL + Immersal.SERVER_LOCALIZE, {method: 'POST', body: payload})
               .then(response => {
                 if (!response.ok) {
+                  this.localization.localizing = false;
                   reject(new Error(response.status));
                   return;
                 }
@@ -783,20 +820,24 @@ class Immersal extends EventTarget {
 
                   resolve(this.localizeInfo);
                 } else {
+                  this.localization.localizing = false;
                   reject("[IMMERSAL] Localization failed");
                 }
               })
               .catch(error => {
                 console.error(`[IMMERSAL] localizeServerAsync: Error:`, error);
+                this.localization.localizing = false;
                 reject(error);
               });
           })
           .catch(error => {
             console.error(`[IMMERSAL] getPngData: Error:`, error);
+            this.localization.localizing = false;
             reject(error);
           });
       } catch (e) {
         console.log(`[IMMERSAL] localizeServerAsync: Error:`, e);
+        this.localization.localizing = false;
         reject(e);
       }
     });

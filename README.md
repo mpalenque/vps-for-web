@@ -3,13 +3,21 @@ Immersal VPS for Web (aka WebAR)
 
 This is a sample of how to use Immersal's Visual Positioning System (VPS) for on-device localization natively on a (mobile) Web browser. It can be used e.g. for persistent and anchored WebAR experiences, and to retrieve the user's position in global coordinates (latitude, longitude, altitude) from the camera image.
 
+## What's new (Feb 07, 2025)
+
+- Added Babylon.js sample
+- Improved UI for localization testing (split into on-device / on-server modes)
+- Improved pose filtering
+- Minor bug fixes
+- Recompiled Wasm components with Emscripten 4.0.2
+
 ## Features
 
 - Localizes against Immersal maps created with the Mapper app ([App Store](https://apps.apple.com/app/immersal-mapper/id1466607906), [Play Store](https://play.google.com/store/apps/details?id=com.immersal.sdk.mapper)), BLK2GO, 360 cameras... 100% compatible.
 - Very lean JavaScript ES6 module implementation
 - WGS84/ECEF support (a localized pose contains the information in global coordinates if the map itself has been saved with GPS coordinates)
 - Works in both portrait and landscape orientations
-- Supports both Three.js and Babylon.js (the latter example coming soon)
+- Supports both Three.js and Babylon.js
 - Uses the device gyroscope for orientation tracking, and continuous localization for translation (position) tracking to emulate SLAM
 - Supports either one-shot or continuous localization
 - Supports both on-device and on-server localization (through the Immersal REST API)

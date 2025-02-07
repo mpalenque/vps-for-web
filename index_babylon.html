@@ -4,20 +4,21 @@
 <meta charset="utf-8">
 <meta http-equiv="X-UA-Compatible" content="IE=edge">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>THREE + Immersal VPS for Web</title>
+<title>BABYLON + Immersal VPS for Web</title>
 <link rel="stylesheet" href="css/styles.css">
 <meta id="theme-color" name="theme-color" content="#37474F">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-<script src="//cdnjs.cloudflare.com/ajax/libs/three.js/r123/three.min.js"></script>
-<script src="//cdn.jsdelivr.net/gh/mrdoob/three.js@r123/examples/js/loaders/PLYLoader.js"></script>
-<script src="//cdn.jsdelivr.net/gh/mrdoob/three.js@r123/examples/js/loaders/GLTFLoader.js"></script>
-<script src="//cdn.jsdelivr.net/gh/mrdoob/three.js@r123/examples/js/loaders/RGBELoader.js"></script>
+<script src="https://cdn.babylonjs.com/babylon.js"></script>
+<script src="https://cdn.babylonjs.com/loaders/babylonjs.loaders.js"></script>
+<script src="js/babylon/plyLoader.js"></script>
 </head>
 
 <body>
-<div id="container"></div>
+<div id="container">
+  <canvas id="renderCanvas"></canvas>
+</div>
 <div id="uicontainer">
   <div class="form-group">
     <input type="radio" id="mode1" name="mode" value="ondevice" checked onclick="hide('serverlocui', this); show('devicelocui', this)"/>
@@ -43,6 +44,7 @@
   const USE_FILTERING = true;
 
   const container = document.getElementById("container");
+  const canvas = document.getElementById("renderCanvas");
   const uiContainer = document.getElementById("uicontainer");
   const permButton = document.getElementById("permButton");
   const locButton = document.getElementById("locButton");
@@ -51,18 +53,40 @@
   const lon = document.getElementById("longitude");
   const alt = document.getElementById("altitude");
 
-  const P = new THREE.Vector3();
-  const Q = new THREE.Quaternion();
-  const QG = new THREE.Quaternion();
+  const engine = new BABYLON.Engine(canvas, true, null, true);
+  engine.enableOfflineSupport = false;
+
+  const POS = BABYLON.Vector3.Zero();
+  const ROT = BABYLON.Quaternion.Identity();
+  const Q = BABYLON.Quaternion.Identity();
+  const QG = BABYLON.Quaternion.Identity();
   
-  let camera, scene, renderer, clock, pcgeo;
-  let logo, mixer;
+  let camera, scene;
+  let logo, mesh, mixer;
   let immersal;
   let mapHandle = -1;
   let pointCloud = null;
-  let plyLoaded = false;
   let contentLoaded = false;
   let prevTime = 0;
+
+  const createScene = async () => {
+    scene = new BABYLON.Scene(engine);
+    scene.clearColor = new BABYLON.Color4(0, 0, 0, 0);
+    scene.useRightHandedSystem = true;
+
+    camera = new BABYLON.UniversalCamera("RenderCamera", BABYLON.Vector3.Zero(), scene);
+    camera.fovMode = BABYLON.Camera.FOVMODE_VERTICAL_FIXED;
+    scene.activeCamera = camera;
+    camera.attachControl(engine.getRenderingCanvas(), true);
+
+    const environ = BABYLON.CubeTexture.CreateFromPrefilteredData("./assets/palermo.env", scene);
+    scene.environmentTexture = environ;
+
+    const {meshes} = await BABYLON.SceneLoader.ImportMeshAsync(undefined, "./assets/", "immersal_LOGO.glb", scene);
+    logo = meshes.find((mesh) => mesh.name === "immersal");
+
+    return scene;
+  }
 
   const init = async () => {
     const mapId = immersalParams.mapIds[0];
@@ -72,31 +96,26 @@
 
     //await immersal.freeMap(mapHandle);
 
-    camera = new THREE.PerspectiveCamera(45, window.innerWidth / window.innerHeight, 0.001, 10000);
-    scene = new THREE.Scene();
+    createScene(engine).then(scene => {
+      const pointCloud = new BABYLON.PointsCloudSystem("PointCloud", 10, scene, {updateable: true});
+      scene.onReadyObservable.add(() => {
+        const assetsManager = new BABYLON.AssetsManager(scene);
+        assetsManager.useDefaultLoadingScreen = false;
+        loadPLY(assetsManager, pointCloud, mapId);
+        assetsManager.loadAsync();
+      });
 
-    // renderer
-    renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
-    renderer.setPixelRatio(window.devicePixelRatio);
-    renderer.toneMapping = THREE.ACESFilmicToneMapping;
-    renderer.toneMappingExposure = 1;
+      scene.onBeforeRenderObservable.add(render);
 
-    resize();
+      engine.runRenderLoop(() => {
+          scene.render();
+      });
 
-    container.appendChild(renderer.domElement);
-
-    immersal.addEventListener('resize', resize);
-
-    // content
-    loadPLY(mapId);
-    loadContent();
-
-    uiContainer.style.display = "block";
-
-    // clock
-    clock = new THREE.Clock();
-
-    animate();
+      uiContainer.style.display = "block";
+      
+      resize();
+      immersal.addEventListener('resize', resize);
+    });
   }
 
   permButton.addEventListener("click", function(e) {
@@ -131,19 +150,10 @@
   });
 
   const resize = (e) => {
-    if (!immersal.camera) return;
-    const w = immersal.camera.el.width;
-    const h = immersal.camera.el.height;
-    camera.aspect = w / h;
-    camera.updateProjectionMatrix();
-    renderer.setSize(w, h);
+    engine.resize();
   }
 
-  const animate = () => {
-    renderer.setAnimationLoop(render);
-  }
-
-  const render = (time) => {
+  const render = () => {
     const timestamp = performance.now();
     const dt = timestamp - prevTime;
     prevTime = timestamp;
@@ -153,37 +163,45 @@
     }
 
     if (immersal.localization.counter > 1) {
-      camera.fov = immersal.getVFov();
-      camera.updateProjectionMatrix();
+      if (immersal.camera) {
+        const w = immersal.camera.el.width;
+        const h = immersal.camera.el.height;
+        const aspect = w / h;
+        let fovV = immersal.getVFov();
+        if (w > h) {
+          fovV /= aspect;
+        }
+        camera.fov = BABYLON.Tools.ToRadians(fovV);
+      }
 
       const {position, rotation, elapsedTime, wgs84} = immersal.localizeInfo;
 
       if (immersal.continuousLocalization) {
         const {position, rotation} = immersal.getEstimatedPose(timestamp);
 
-        P.set(position[0], position[1], position[2]);
+        POS.set(position[0], position[1], position[2]);
         Q.set(rotation[0], rotation[1], rotation[2], rotation[3]);
         QG.set(immersal.gyroData.x, immersal.gyroData.y, immersal.gyroData.z, immersal.gyroData.w);
-        Q.multiply(QG);
+        Q.multiplyToRef(QG, ROT);
 
         if (USE_FILTERING) {
           let step = 0.025 * dt;
           if (step > 1.0)
             step = 1.0;
 
-          camera.position.lerp(P, step);
-          camera.quaternion.set(Q.x, Q.y, Q.z, Q.w);
+          BABYLON.Vector3.LerpToRef(camera.position, POS, step, camera.position);
+          camera.rotationQuaternion = ROT;
         } else {
-          camera.position.set(P.x, P.y, P.z);
-          camera.quaternion.set(Q.x, Q.y, Q.z, Q.w);
+          camera.position.set(POS.x, POS.y, POS.z);
+          camera.rotationQuaternion = ROT;
         }
       } else {
-        P.set(position.x, position.y, position.z);
+        POS.set(position.x, position.y, position.z);
         Q.set(rotation.x, rotation.y, rotation.z, rotation.w);
         QG.set(immersal.gyroData.x, immersal.gyroData.y, immersal.gyroData.z, immersal.gyroData.w);
-        Q.multiply(QG);
-        camera.position.set(P.x, P.y, P.z);
-        camera.quaternion.set(Q.x, Q.y, Q.z, Q.w);
+        Q.multiplyToRef(QG, ROT);
+        camera.position.set(POS.x, POS.y, POS.z);
+        camera.rotationQuaternion = ROT;
       }
 
       lat.innerHTML = wgs84.latitude.toFixed(5);
@@ -192,92 +210,39 @@
 
       //console.log(`latitude: ${wgs84.latitude}, longitude: ${wgs84.longitude}, altitude: ${wgs84.altitude}`);
     }
-
-    updateContent();
-
-    renderer.render(scene, camera);
   }
 
   // Load a .ply file from Immersal to visualize localization.
   // Switch DOWNLOAD_SPARSE to DOWNLOAD_DENSE if you want to use the dense point cloud.
-  function loadPLY(mapId) {
+  const loadPLY = (assetsManager, pointCloud, mapId) => {
     console.log(`Loading .ply for map: [${mapId}]`);
-    const loader = new THREE.PLYLoader();
     const url = Immersal.BASE_URL + Immersal.DOWNLOAD_SPARSE + '?token=' + immersalParams.developerToken + '&id=' + mapId;
-
-    loader.load(url, function(geometry) {
-      pcgeo = geometry;
-      geometry.computeVertexNormals();
-      geometry.computeFaceNormals();
-
-      // sizes
-      let vCount = geometry.getAttribute('position').count;
-      const sizes = new Float32Array(vCount);
-      for (let i = 0; i < vCount; i++) {
-        sizes[i] = 1;
-      }
-      geometry.setAttribute('size', new THREE.BufferAttribute(sizes, 1));
-
-      const material = new THREE.PointsMaterial({ color: 0xFFFF00, vertexColors: THREE.VertexColors, size: 4, sizeAttenuation: false } );
-
-      pointCloud = new THREE.Points(geometry, material);
-      pointCloud.scale.set(1, 1, 1);
-      scene.add(pointCloud);
-      plyLoaded = true;
-      console.log(`PLY loaded`);
-    });
-  }
-
-  function loadContent() {
-    let logoPath = './assets/immersal_LOGO.glb';
-
-    new THREE.RGBELoader()
-      .setPath('./assets/')
-      .load('palermo_1k.hdr', function(texture) {
-        texture.mapping = THREE.EquirectangularReflectionMapping;
-        scene.environment = texture;
-        renderer.render(scene, camera);
-
-        // model
-        const gltfLoader = new THREE.GLTFLoader();
-        gltfLoader.load(logoPath, async function(gltf) {
-          logo = gltf.scene;
-
-          mixer = new THREE.AnimationMixer(gltf.scene);
-          var action = mixer.clipAction(gltf.animations[0]);
-          action.play();
-
-          scene.add(logo);
-          renderer.render(scene, camera);
-
-          contentLoaded = true;
-        }, undefined, function(error) {
-          console.error(error);
+    const binaryTask = assetsManager.addBinaryFileTask("downloadPlyBinary", url);
+    binaryTask.onError = (error) => {
+      console.error(`loadPLY: Failed to download ply: [${url}]`);
+    }
+    binaryTask.onSuccess = (task) => {
+      try {
+        const {vertices, colors} = plyLoader(task.data);
+        pointCloud.addPoints(Math.floor(vertices.length / 3), (particle, i, _) => {
+          particle.color = new BABYLON.Color3(
+            colors[i * 3],
+            colors[i * 3 + 1],
+            colors[i * 3 + 2]
+          );
+          particle.position = new BABYLON.Vector3(
+            vertices[i * 3],
+            vertices[i * 3 + 1],
+            vertices[i * 3 + 2]
+          )
         });
-      });
-
-    const ambient = new THREE.AmbientLight(0x404040); // soft white light
-    scene.add(ambient);
-
-    let directional = new THREE.DirectionalLight(0xffff00, 5);
-    directional.position.set(-1, 1, 0);
-    scene.add(directional);
-  }
-
-  function updateContent() {
-    let dt = clock.getDelta();
-    let t = clock.getElapsedTime();
-    if (mixer) mixer.update(dt);
-
-    if (plyLoaded) {
-      const attributes = pcgeo.attributes;
-
-      for (let i = 0; i < attributes.size.array.length; i ++) {
-        attributes.size.array[i] = 14 + 13 * Math.sin(0.1 * i + (t*2));
+        pointCloud.setParticles();
+        pointCloud.buildMeshAsync();
+        console.log(`PLY loaded`);
+      } catch (error) {
+        console.error(`Failed to parse ply: ${error.message}`);
       }
-    
-      attributes.size.needsUpdate = true;
-    }  
+    }
   }
 
   document.addEventListener("DOMContentLoaded", (e) => {
