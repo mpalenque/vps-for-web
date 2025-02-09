@@ -42,7 +42,7 @@ This is a sample of how to use Immersal's Visual Positioning System (VPS) for on
 ### 1. HTTPS Setup
 Modern browsers require HTTPS for accessing device cameras and sensors. For development, you can:
 
-Using npm (recommended):
+Using npm:
 ```bash
 # Install http-server globally
 npm install -g http-server
@@ -50,14 +50,6 @@ npm install -g http-server
 openssl req -newkey rsa:2048 -new -nodes -x509 -days 3650 -keyout key.pem -out cert.pem
 # Start HTTPS server
 http-server -S -C cert.pem -K key.pem
-```
-
-Or using Python:
-```bash
-# Generate certificate
-openssl req -x509 -newkey rsa:4096 -keyout key.pem -out cert.pem -days 365 -nodes
-# Start HTTPS server
-python3 -m http.server 8000 --bind 0.0.0.0 --ssl-cert cert.pem --ssl-key key.pem
 ```
 
 ### 2. Configuration
