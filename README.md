@@ -18,7 +18,7 @@ This is a sample of how to use Immersal's Visual Positioning System (VPS) for on
 - WGS84/ECEF support (a localized pose contains the information in global coordinates if the map itself has been saved with GPS coordinates)
 - Works in both portrait and landscape orientations
 - Supports both Three.js and Babylon.js
-- Uses the device gyroscope for orientation tracking, and continuous localization for translation (position) tracking to emulate SLAM
+- Uses the device IMU for orientation tracking, and continuous localization for translation (position) tracking to emulate SLAM
 - Supports either one-shot or continuous localization
 - Supports both on-device and on-server localization (through the Immersal REST API)
 
@@ -80,7 +80,7 @@ For development and testing:
 ### 4. Required Permissions
 The app requires access to:
 - Camera (for localization)
-- Device orientation sensors (for pose tracking)
+- Device orientation sensors (for rotational tracking)
 - HTTPS (required for accessing device features)
 
 ### 5. Troubleshooting
