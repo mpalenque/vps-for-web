@@ -19,17 +19,41 @@ trackerPluginModule().then(instance => {
 });
 
 export const createOrientationSensor = async () => {
-  if (typeof DeviceOrientationEvent !== "undefined" && typeof DeviceMotionEvent.requestPermission === 'function') {
+  // Request device motion permission
+  if (typeof DeviceMotionEvent !== "undefined" && typeof DeviceMotionEvent.requestPermission === 'function') {
     try {
-      const permissionState = await DeviceMotionEvent.requestPermission();
-      if (permissionState === 'granted') {
-        console.log(`[IMMERSAL] DeviceOrientation permissions ${permissionState}`);
+      const motionPermissionState = await DeviceMotionEvent.requestPermission();
+      if (motionPermissionState === 'granted') {
+        console.log(`[IMMERSAL] DeviceMotion permissions ${motionPermissionState}`);
         window.addEventListener('devicemotion', () => {});
+      } else {
+        console.error(`[IMMERSAL] DeviceMotion permissions denied: ${motionPermissionState}`);
+        return false;
+      }
+    } catch (error) {
+      console.error(`[IMMERSAL] Error requesting DeviceMotion permission:`, error);
+      return false;
+    }
+  }
+
+  // Request device orientation permission
+  if (typeof DeviceOrientationEvent !== "undefined" && typeof DeviceOrientationEvent.requestPermission === 'function') {
+    try {
+      const orientationPermissionState = await DeviceOrientationEvent.requestPermission();
+      if (orientationPermissionState === 'granted') {
+        console.log(`[IMMERSAL] DeviceOrientation permissions ${orientationPermissionState}`);
+        window.addEventListener('deviceorientation', () => {});
+      } else {
+        console.error(`[IMMERSAL] DeviceOrientation permissions denied: ${orientationPermissionState}`);
+        return false;
       }
     } catch (error) {
       console.error(`[IMMERSAL] Error requesting DeviceOrientation permission:`, error);
+      return false;
     }
   }
+  
+  return true;
 }
 
 class Immersal extends EventTarget {
