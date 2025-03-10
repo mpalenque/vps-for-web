@@ -72,7 +72,8 @@
 
     //await immersal.freeMap(mapHandle);
 
-    camera = new THREE.PerspectiveCamera(45, window.innerWidth / window.innerHeight, 0.001, 10000);
+    // Change the camera's far clipping plane to an extremely large value
+    camera = new THREE.PerspectiveCamera(45, window.innerWidth / window.innerHeight, 0.001, 1000000000);
     scene = new THREE.Scene();
 
     // renderer
@@ -80,6 +81,9 @@
     renderer.setPixelRatio(window.devicePixelRatio);
     renderer.toneMapping = THREE.ACESFilmicToneMapping;
     renderer.toneMappingExposure = 1;
+    
+    // Disable logarithmic depth buffer to prevent z-fighting at extreme distances
+    renderer.logarithmicDepthBuffer = true;
 
     resize();
 
@@ -154,6 +158,8 @@
 
     if (immersal.localization.counter > 1) {
       camera.fov = immersal.getVFov();
+      // Ensure the far clip plane remains extremely large when updating projection matrix
+      camera.far = 1000000000;
       camera.updateProjectionMatrix();
 
       const {position, rotation, elapsedTime, wgs84} = immersal.localizeInfo;
@@ -237,6 +243,28 @@
     gltfLoader.load(vastModelPath, function(gltf) {
       const vastModel = gltf.scene;
       vastModel.position.set(0, 0, 0);
+      
+      // Make sure the model is visible from any distance by scaling up its materials' visibility
+      vastModel.traverse(function(node) {
+        if (node.isMesh) {
+          if (node.material) {
+            // If it's an array of materials
+            if (Array.isArray(node.material)) {
+              node.material.forEach(material => {
+                if (material.transparent) {
+                  material.depthWrite = true; // Help with depth sorting
+                }
+              });
+            } 
+            // If it's a single material
+            else {
+              if (node.material.transparent) {
+                node.material.depthWrite = true; // Help with depth sorting
+              }
+            }
+          }
+        }
+      });
       
       // Setup animation mixer for the VAST model
       mixer = new THREE.AnimationMixer(vastModel);
