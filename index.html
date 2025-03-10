@@ -1,0 +1,233 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AR Scene with Occlusion</title>
+    <style>
+        body {
+            margin: 0;
+            overflow: hidden;
+        }
+        canvas {
+            display: block;
+        }
+        #video {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+            z-index: -1;
+        }
+        #permissionButton {
+            position: fixed;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            padding: 15px 20px;
+            background-color: #007bff;
+            color: white;
+            border: none;
+            border-radius: 5px;
+            font-size: 16px;
+            z-index: 1000;
+            cursor: pointer;
+        }
+    </style>
+</head>
+<body>
+    <video id="video" autoplay playsinline></video>
+    <button id="permissionButton">Enable AR Experience</button>
+    <script type="module">
+        import * as THREE from 'https://cdn.skypack.dev/three@0.138.0';
+        import { OrbitControls } from 'https://cdn.skypack.dev/three@0.138.0/examples/jsm/controls/OrbitControls.js';
+
+        // Global variables
+        const permissionButton = document.getElementById('permissionButton');
+        const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent) && !window.MSStream;
+        
+        // Function to request motion permissions specifically
+        async function requestMotionPermissions() {
+            // Request device orientation permission
+            if (typeof DeviceOrientationEvent !== 'undefined' && 
+                typeof DeviceOrientationEvent.requestPermission === 'function') {
+                try {
+                    const orientationPermission = await DeviceOrientationEvent.requestPermission();
+                    console.log(`Orientation permission: ${orientationPermission}`);
+                    
+                    // Add orientation event listener if granted
+                    if (orientationPermission === 'granted') {
+                        window.addEventListener('deviceorientation', handleOrientation);
+                    }
+                } catch (error) {
+                    console.error('Error requesting orientation permission:', error);
+                }
+            }
+            
+            // Request device motion permission
+            if (typeof DeviceMotionEvent !== 'undefined' && 
+                typeof DeviceMotionEvent.requestPermission === 'function') {
+                try {
+                    const motionPermission = await DeviceMotionEvent.requestPermission();
+                    console.log(`Motion permission: ${motionPermission}`);
+                    
+                    // Add motion event listener if granted
+                    if (motionPermission === 'granted') {
+                        window.addEventListener('devicemotion', handleMotion);
+                    }
+                } catch (error) {
+                    console.error('Error requesting motion permission:', error);
+                }
+            }
+        }
+        
+        // Function to handle device orientation data
+        function handleOrientation(event) {
+            // Log once to confirm it's working
+            console.log('Orientation event received');
+            // Remove the listener after first confirmation
+            window.removeEventListener('deviceorientation', handleOrientation);
+        }
+        
+        // Function to handle device motion data
+        function handleMotion(event) {
+            // Log once to confirm it's working
+            console.log('Motion event received');
+            // Remove the listener after first confirmation
+            window.removeEventListener('devicemotion', handleMotion);
+        }
+        
+        // Function to request all necessary permissions
+        async function requestPermissions() {
+            try {
+                // Request camera permissions
+                await navigator.mediaDevices.getUserMedia({ video: true });
+                console.log('Camera permission granted');
+                
+                // iOS requires motion permissions be requested from a user gesture
+                if (isIOS) {
+                    await requestMotionPermissions();
+                }
+                
+                // Hide permission button
+                permissionButton.style.display = 'none';
+                
+                // Initialize experience after permissions
+                initializeExperience();
+            } catch (error) {
+                console.error('Error requesting permissions:', error);
+                alert('Please grant all permissions for the AR experience to work.');
+            }
+        }
+
+        // Add event listener to button
+        permissionButton.addEventListener('click', requestPermissions);
+
+        function initializeExperience() {
+            // Initialize scene, camera and renderer
+            const scene = new THREE.Scene();
+            const camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
+            const renderer = new THREE.WebGLRenderer({ 
+                alpha: true,
+                antialias: true
+            });
+            renderer.setSize(window.innerWidth, window.innerHeight);
+            renderer.setClearColor(0x000000, 0);
+            document.body.appendChild(renderer.domElement);
+
+            // Set up camera position
+            camera.position.z = 5;
+
+            // Create lights
+            const ambientLight = new THREE.AmbientLight(0xffffff, 0.5);
+            scene.add(ambientLight);
+            
+            const directionalLight = new THREE.DirectionalLight(0xffffff, 0.8);
+            directionalLight.position.set(1, 1, 1);
+            scene.add(directionalLight);
+
+            // Create the red sphere
+            const sphereGeometry = new THREE.SphereGeometry(1.5, 32, 32);
+            const sphereMaterial = new THREE.MeshStandardMaterial({ color: 0xff0000 });
+            const sphere = new THREE.Mesh(sphereGeometry, sphereMaterial);
+            sphere.position.x = 1;
+            scene.add(sphere);
+
+            // Create occluding cube
+            const cubeGeometry = new THREE.BoxGeometry(2, 2, 2);
+            const cubeMaterial = new THREE.MeshBasicMaterial({
+                colorWrite: false, // Don't write color to the framebuffer
+                depthWrite: true   // Do write to the depth buffer
+            });
+            const cube = new THREE.Mesh(cubeGeometry, cubeMaterial);
+            cube.position.y = -0.75; // Position the cube at the lower half of the sphere
+            cube.position.x = 1;     // Match the sphere's x position
+            scene.add(cube);
+
+            // Add orbit controls
+            const controls = new OrbitControls(camera, renderer.domElement);
+            controls.enableDamping = true;
+            controls.dampingFactor = 0.05;
+
+            // Access device camera
+            setupCamera().then(() => {
+                animate();
+            }).catch(error => {
+                console.error('Setup failed:', error);
+            });
+            
+            // Animation loop
+            function animate() {
+                requestAnimationFrame(animate);
+                
+                // Rotate objects slightly
+                sphere.rotation.x += 0.005;
+                sphere.rotation.y += 0.007;
+                cube.rotation.x += 0.002;
+                cube.rotation.y += 0.003;
+                
+                controls.update();
+                renderer.render(scene, camera);
+            }
+
+            // Handle window resize
+            function onWindowResize() {
+                camera.aspect = window.innerWidth / window.innerHeight;
+                camera.updateProjectionMatrix();
+                renderer.setSize(window.innerWidth, window.innerHeight);
+            }
+            window.addEventListener('resize', onWindowResize);
+        }
+
+        // Access device camera
+        async function setupCamera() {
+            try {
+                const video = document.getElementById('video');
+                const constraints = {
+                    video: {
+                        facingMode: { ideal: 'environment' },
+                        width: { ideal: window.innerWidth },
+                        height: { ideal: window.innerHeight }
+                    }
+                };
+                
+                const stream = await navigator.mediaDevices.getUserMedia(constraints);
+                video.srcObject = stream;
+                
+                // Wait for video to be ready
+                return new Promise((resolve) => {
+                    video.onloadedmetadata = () => {
+                        video.play();
+                        resolve();
+                    };
+                });
+            } catch (error) {
+                console.error('Error accessing camera:', error);
+                alert('Failed to access camera. Please allow camera access and reload the page.');
+            }
+        }
+    </script>
+</body>
+</html>
