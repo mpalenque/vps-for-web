@@ -72,8 +72,7 @@
 
     //await immersal.freeMap(mapHandle);
 
-    // Change the camera's far clipping plane to an extremely large value
-    camera = new THREE.PerspectiveCamera(45, window.innerWidth / window.innerHeight, 0.001, 1000000000);
+    camera = new THREE.PerspectiveCamera(45, window.innerWidth / window.innerHeight, 0.001, 10000);
     scene = new THREE.Scene();
 
     // renderer
@@ -81,9 +80,6 @@
     renderer.setPixelRatio(window.devicePixelRatio);
     renderer.toneMapping = THREE.ACESFilmicToneMapping;
     renderer.toneMappingExposure = 1;
-    
-    // Disable logarithmic depth buffer to prevent z-fighting at extreme distances
-    renderer.logarithmicDepthBuffer = true;
 
     resize();
 
@@ -158,8 +154,6 @@
 
     if (immersal.localization.counter > 1) {
       camera.fov = immersal.getVFov();
-      // Ensure the far clip plane remains extremely large when updating projection matrix
-      camera.far = 1000000000;
       camera.updateProjectionMatrix();
 
       const {position, rotation, elapsedTime, wgs84} = immersal.localizeInfo;
@@ -236,69 +230,13 @@
 
   function loadContent() {
     let logoPath = './assets/immersal_LOGO.glb';
-    let vastModelPath = './assets/VAST.glb';
 
-    // Load the VAST.glb model at position 0,0,0
-    const gltfLoader = new THREE.GLTFLoader();
-    gltfLoader.load(vastModelPath, function(gltf) {
-      const vastModel = gltf.scene;
-      vastModel.position.set(0, 0, 0);
-      vastModel.scale.set(0.0004, 0.0004, 0.0004); // Scale down the model to 4% of its original size
-      
-      // Make sure the model is visible from any distance by scaling up its materials' visibility
-      vastModel.traverse(function(node) {
-        if (node.isMesh) {
-          if (node.material) {
-            // If it's an array of materials
-            if (Array.isArray(node.material)) {
-              node.material.forEach(material => {
-                if (material.transparent) {
-                  material.depthWrite = true; // Help with depth sorting
-                }
-              });
-            } 
-            // If it's a single material
-            else {
-              if (node.material.transparent) {
-                node.material.depthWrite = true; // Help with depth sorting
-              }
-            }
-          }
-        }
-      });
-      
-      // Setup animation mixer for the VAST model
-      mixer = new THREE.AnimationMixer(vastModel);
-      
-      // Find the "RIG" animation and play it in loop
-      const rigAnimation = gltf.animations.find(anim => anim.name === "RIG") || gltf.animations[0];
-      if (rigAnimation) {
-        const action = mixer.clipAction(rigAnimation);
-        action.loop = THREE.LoopRepeat;
-        action.clampWhenFinished = false;
-        action.play();
-        console.log('Playing RIG animation in loop');
-      } else {
-        console.warn('RIG animation not found, playing first available animation');
-        if (gltf.animations.length > 0) {
-          const action = mixer.clipAction(gltf.animations[0]);
-          action.loop = THREE.LoopRepeat;
-          action.play();
-        }
-      }
-      
-      scene.add(vastModel);
-      console.log('VAST model loaded with animations:', gltf.animations.map(a => a.name).join(', '));
-      contentLoaded = true;
-    }, 
-    // Progress callback
-    function(xhr) {
-      console.log('VAST model loading: ' + (xhr.loaded / xhr.total * 100) + '% loaded');
-    }, 
-    // Error callback
-    function(error) {
-      console.error('Error loading VAST model:', error);
-    });
+    // Add a red cube at position 0,0,0
+    const geometry = new THREE.BoxGeometry(0.5, 0.5, 0.5);
+    const material = new THREE.MeshStandardMaterial({ color: 0xff0000 });
+    const cube = new THREE.Mesh(geometry, material);
+    cube.position.set(0, 0, 0);
+    scene.add(cube);
 
     new THREE.RGBELoader()
       .setPath('./assets/')
@@ -307,14 +245,28 @@
         scene.environment = texture;
         renderer.render(scene, camera);
 
-        // We've moved the VAST model loading outside this callback
-        // to avoid potential rendering issues
+        // model
+        const gltfLoader = new THREE.GLTFLoader();
+        gltfLoader.load(logoPath, async function(gltf) {
+          logo = gltf.scene;
+
+          mixer = new THREE.AnimationMixer(gltf.scene);
+          var action = mixer.clipAction(gltf.animations[0]);
+          action.play();
+
+          scene.add(logo);
+          renderer.render(scene, camera);
+
+          contentLoaded = true;
+        }, undefined, function(error) {
+          console.error(error);
+        });
       });
 
-    const ambient = new THREE.AmbientLight(0x404040, 2); // Increased intensity for better visibility
+    const ambient = new THREE.AmbientLight(0x404040); // soft white light
     scene.add(ambient);
 
-    let directional = new THREE.DirectionalLight(0xffffff, 3); // Changed color and intensity
+    let directional = new THREE.DirectionalLight(0xffff00, 5);
     directional.position.set(-1, 1, 0);
     scene.add(directional);
   }
@@ -322,11 +274,7 @@
   function updateContent() {
     let dt = clock.getDelta();
     let t = clock.getElapsedTime();
-    
-    // Update the animation mixer if it exists
-    if (mixer) {
-      mixer.update(dt);
-    }
+    if (mixer) mixer.update(dt);
 
     if (plyLoaded) {
       const attributes = pcgeo.attributes;
