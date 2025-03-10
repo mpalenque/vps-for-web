@@ -40,10 +40,6 @@
 <script type="module">
   import { immersalParams } from './js/imConfig.js';
   import { Immersal, createOrientationSensor } from './js/immersal.js';
-  import { setupIosOrientationFix } from './js/ios-orientation-fix.js';
-
-  // Initialize iOS orientation fixes
-  setupIosOrientationFix();
 
   const USE_FILTERING = true;
 
@@ -119,24 +115,31 @@
       
       resize();
       immersal.addEventListener('resize', resize);
-    });s) => {
+    });
   }
-utton.style.visibility = "hidden";
-  permButton.addEventListener("click", function(e) { init();
-    createOrientationSensor().then(() => { } else {
-      permButton.style.visibility = "hidden";        alert("Motion and orientation sensor permissions are required for tracking. Please allow permissions and try again.");
-      init();
-    });=> {
-  });ing sensors:", error);
-initialize motion sensors. Please ensure you're using a device with motion sensors and try again.");
+
+  permButton.addEventListener("click", function(e) {
+    createOrientationSensor().then((success) => {
+      if (success !== false) {
+        permButton.style.visibility = "hidden";
+        init();
+      } else {
+        alert("Motion and orientation sensor permissions are required for tracking. Please allow permissions and try again.");
+      }
+    }).catch(error => {
+      console.error("Error initializing sensors:", error);
+      alert("Failed to initialize motion sensors. Please ensure you're using a device with motion sensors and try again.");
+    });
+  });
+
   locButton.addEventListener("click", function(e) {
     if (immersal) {
       immersal.localizeDeviceAsync()
-      .then(result => {tener("click", function(e) {
-        console.log(`[IMMERSAL] On-device localization result:`, result);mmersal) {
-      }) immersal.localizeDeviceAsync()
-      .catch(e => { .then(result => {
-        console.log(e);        console.log(`[IMMERSAL] On-device localization result:`, result);
+      .then(result => {
+        console.log(`[IMMERSAL] On-device localization result:`, result);
+      })
+      .catch(e => {
+        console.log(e);
       });
     }
   });
@@ -144,164 +147,151 @@ initialize motion sensors. Please ensure you're using a device with motion senso
   locServerButton.addEventListener("click", function(e) {
     if (immersal) {
       immersal.localizeServerAsync()
-      .then(result => {entListener("click", function(e) {
-        console.log(`[IMMERSAL] On-server localization result:`, result);mmersal) {
-      }) immersal.localizeServerAsync()
-      .catch(e => { .then(result => {
-        console.log(e);        console.log(`[IMMERSAL] On-server localization result:`, result);
+      .then(result => {
+        console.log(`[IMMERSAL] On-server localization result:`, result);
+      })
+      .catch(e => {
+        console.log(e);
       });
     }
-  });     console.log(e);
-      });
+  });
+
   const resize = (e) => {
     engine.resize();
   }
 
-  const render = () => {    engine.resize();
+  const render = () => {
     const timestamp = performance.now();
     const dt = timestamp - prevTime;
-    prevTime = timestamp;st render = () => {
-    const timestamp = performance.now();
+    prevTime = timestamp;
+
     if (mapHandle >= 0 && immersal.continuousLocalization) {
       immersal.localizeDevice(timestamp);
     }
-sLocalization) {
-    if (immersal.localization.counter > 1) {(timestamp);
+
+    if (immersal.localization.counter > 1) {
       if (immersal.camera) {
         const w = immersal.camera.el.width;
-        const h = immersal.camera.el.height;tion.counter > 1) {
-        const aspect = w / h;(immersal.camera) {
+        const h = immersal.camera.el.height;
+        const aspect = w / h;
         let fovV = immersal.getVFov();
-        if (w > h) { const h = immersal.camera.el.height;
-          fovV /= aspect;        const aspect = w / h;
+        if (w > h) {
+          fovV /= aspect;
         }
-        camera.fov = BABYLON.Tools.ToRadians(fovV);        if (w > h) {
+        camera.fov = BABYLON.Tools.ToRadians(fovV);
       }
 
-      const {position, rotation, elapsedTime, wgs84} = immersal.localizeInfo;        camera.fov = BABYLON.Tools.ToRadians(fovV);
+      const {position, rotation, elapsedTime, wgs84} = immersal.localizeInfo;
 
       if (immersal.continuousLocalization) {
         const {position, rotation} = immersal.getEstimatedPose(timestamp);
 
-        POS.set(position[0], position[1], position[2]);      if (immersal.continuousLocalization) {
-        Q.set(rotation[0], rotation[1], rotation[2], rotation[3]);ation} = immersal.getEstimatedPose(timestamp);
+        POS.set(position[0], position[1], position[2]);
+        Q.set(rotation[0], rotation[1], rotation[2], rotation[3]);
         QG.set(immersal.gyroData.x, immersal.gyroData.y, immersal.gyroData.z, immersal.gyroData.w);
-        Q.multiplyToRef(QG, ROT);0], position[1], position[2]);
-0], rotation[1], rotation[2], rotation[3]);
-        if (USE_FILTERING) {        QG.set(immersal.gyroData.x, immersal.gyroData.y, immersal.gyroData.z, immersal.gyroData.w);
+        Q.multiplyToRef(QG, ROT);
+
+        if (USE_FILTERING) {
           let step = 0.025 * dt;
           if (step > 1.0)
-            step = 1.0;FILTERING) {
+            step = 1.0;
 
           BABYLON.Vector3.LerpToRef(camera.position, POS, step, camera.position);
-          camera.rotationQuaternion = ROT;   step = 1.0;
+          camera.rotationQuaternion = ROT;
         } else {
-          camera.position.set(POS.x, POS.y, POS.z); POS, step, camera.position);
+          camera.position.set(POS.x, POS.y, POS.z);
           camera.rotationQuaternion = ROT;
         }
-      } else {.x, POS.y, POS.z);
+      } else {
         POS.set(position.x, position.y, position.z);
         Q.set(rotation.x, rotation.y, rotation.z, rotation.w);
-        QG.set(immersal.gyroData.x, immersal.gyroData.y, immersal.gyroData.z, immersal.gyroData.w); else {
-        Q.multiplyToRef(QG, ROT);        POS.set(position.x, position.y, position.z);
-        camera.position.set(POS.x, POS.y, POS.z);, rotation.w);
-        camera.rotationQuaternion = ROT;Data.y, immersal.gyroData.z, immersal.gyroData.w);
-      }
+        QG.set(immersal.gyroData.x, immersal.gyroData.y, immersal.gyroData.z, immersal.gyroData.w);
+        Q.multiplyToRef(QG, ROT);
         camera.position.set(POS.x, POS.y, POS.z);
+        camera.rotationQuaternion = ROT;
+      }
+
       lat.innerHTML = wgs84.latitude.toFixed(5);
-      lon.innerHTML = wgs84.longitude.toFixed(5); }
+      lon.innerHTML = wgs84.longitude.toFixed(5);
       alt.innerHTML = wgs84.altitude.toFixed(5);
-      lat.innerHTML = wgs84.latitude.toFixed(5);
+
       //console.log(`latitude: ${wgs84.latitude}, longitude: ${wgs84.longitude}, altitude: ${wgs84.altitude}`);
     }
   }
-ngitude: ${wgs84.longitude}, altitude: ${wgs84.altitude}`);
+
   // Load a .ply file from Immersal to visualize localization.
   // Switch DOWNLOAD_SPARSE to DOWNLOAD_DENSE if you want to use the dense point cloud.
   const loadPLY = (assetsManager, pointCloud, mapId) => {
     console.log(`Loading .ply for map: [${mapId}]`);
-    const url = Immersal.BASE_URL + Immersal.DOWNLOAD_SPARSE + '?token=' + immersalParams.developerToken + '&id=' + mapId;Switch DOWNLOAD_SPARSE to DOWNLOAD_DENSE if you want to use the dense point cloud.
-    const binaryTask = assetsManager.addBinaryFileTask("downloadPlyBinary", url);tCloud, mapId) => {
-    binaryTask.onError = (error) => {.log(`Loading .ply for map: [${mapId}]`);
-      console.error(`loadPLY: Failed to download ply: [${url}]`);ARSE + '?token=' + immersalParams.developerToken + '&id=' + mapId;
+    const url = Immersal.BASE_URL + Immersal.DOWNLOAD_SPARSE + '?token=' + immersalParams.developerToken + '&id=' + mapId;
+    const binaryTask = assetsManager.addBinaryFileTask("downloadPlyBinary", url);
+    binaryTask.onError = (error) => {
+      console.error(`loadPLY: Failed to download ply: [${url}]`);
     }
     binaryTask.onSuccess = (task) => {
-      try {LY: Failed to download ply: [${url}]`);
+      try {
         const {vertices, colors} = plyLoader(task.data);
-        pointCloud.addPoints(Math.floor(vertices.length / 3), (particle, i, _) => {ask) => {
+        pointCloud.addPoints(Math.floor(vertices.length / 3), (particle, i, _) => {
           particle.color = new BABYLON.Color3(
-            colors[i * 3],data);
-            colors[i * 3 + 1],(Math.floor(vertices.length / 3), (particle, i, _) => {
-            colors[i * 3 + 2]ABYLON.Color3(
+            colors[i * 3],
+            colors[i * 3 + 1],
+            colors[i * 3 + 2]
           );
-          particle.position = new BABYLON.Vector3( colors[i * 3 + 1],
-            vertices[i * 3], colors[i * 3 + 2]
+          particle.position = new BABYLON.Vector3(
+            vertices[i * 3],
             vertices[i * 3 + 1],
-            vertices[i * 3 + 2]BYLON.Vector3(
+            vertices[i * 3 + 2]
           )
-        });* 3 + 1],
+        });
         pointCloud.setParticles();
-        pointCloud.buildMeshAsync();   )
-        console.log(`PLY loaded`);   });
-      } catch (error) {     pointCloud.setParticles();
-        console.error(`Failed to parse ply: ${error.message}`);        pointCloud.buildMeshAsync();
+        pointCloud.buildMeshAsync();
+        console.log(`PLY loaded`);
+      } catch (error) {
+        console.error(`Failed to parse ply: ${error.message}`);
       }
     }
-  }or(`Failed to parse ply: ${error.message}`);
+  }
 
-  document.addEventListener("DOMContentLoaded", (e) => {    }
-    // Check for iOS-specific issues related to orientation
-    const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent) && !window.MSStream;
-    if (isIOS) {ner("DOMContentLoaded", (e) => {
-      console.log("[IMMERSAL] iOS device detected, applying specific configurations");ation.search.substring(1);
-    }
-     null;
+  document.addEventListener("DOMContentLoaded", (e) => {
     let s = location.search.substring(1);
-    let mapId = -1;.length > 0) {
-    let token = null;plit('&').forEach((item, index) => {
-   switch (index) {
-    if (s.length > 0) {        case 0:
-      s.split('&').forEach((item, index) => {Int(item); break;
+    let mapId = -1;
+    let token = null;
+
+    if (s.length > 0) {
+      s.split('&').forEach((item, index) => {
         switch (index) {
-        case 0:     token = item; break;
-          mapId = parseInt(item); break;        }
+        case 0:
+          mapId = parseInt(item); break;
         case 1:
           token = item; break;
         }
-      });f (mapId !== -1) {
-    }      immersalParams.mapIds[0] = mapId;
+      });
+    }
 
     if (mapId !== -1) {
       immersalParams.mapIds[0] = mapId;
     }
- }
-    if (token !== null) {  });
+
+    if (token !== null) {
       immersalParams.developerToken = token;
     }
   });
-  function show(el, box) {
-  // UI functions(el).style.display = (box.checked) ? "block" : "none";
+
+  // UI functions
 
   function show(el, box) {
-    document.getElementById(el).style.display = (box.checked) ? "block" : "none";unction hide(el, box) {
-  }    document.getElementById(el).style.display = (box.checked) ? "none" : "none";
+    document.getElementById(el).style.display = (box.checked) ? "block" : "none";
+  }
 
   function hide(el, box) {
     document.getElementById(el).style.display = (box.checked) ? "none" : "none";
-  }sal.continuousLocalization = box.checked;
-Button.style.display = (box.checked) ? "none" : "block";
+  }
+
   function toggleLoc(box) {
+    immersal.continuousLocalization = box.checked;
+    locButton.style.display = (box.checked) ? "none" : "block";
+  }
 
-
-
-
-
-
-
-
-
-
-</html></body></script>  window.toggleLoc = toggleLoc;  window.hide = hide;  window.show = show;  }    locButton.style.display = (box.checked) ? "none" : "block";    immersal.continuousLocalization = box.checked;
   window.show = show;
   window.hide = hide;
   window.toggleLoc = toggleLoc;
