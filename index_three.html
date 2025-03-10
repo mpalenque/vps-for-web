@@ -243,6 +243,7 @@
     gltfLoader.load(vastModelPath, function(gltf) {
       const vastModel = gltf.scene;
       vastModel.position.set(0, 0, 0);
+      vastModel.scale.set(0.04, 0.04, 0.04); // Scale down the model to 4% of its original size
       
       // Make sure the model is visible from any distance by scaling up its materials' visibility
       vastModel.traverse(function(node) {
