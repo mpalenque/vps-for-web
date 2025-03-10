@@ -230,6 +230,7 @@
 
   function loadContent() {
     let logoPath = './assets/immersal_LOGO.glb';
+    let vastPath = './assets/vast.glb';
 
     // Add a red cube at position 0,0,0
     const geometry = new THREE.BoxGeometry(0.5, 0.5, 0.5);
@@ -247,6 +248,8 @@
 
         // model
         const gltfLoader = new THREE.GLTFLoader();
+        
+        // Load the logo model
         gltfLoader.load(logoPath, async function(gltf) {
           logo = gltf.scene;
 
@@ -260,6 +263,19 @@
           contentLoaded = true;
         }, undefined, function(error) {
           console.error(error);
+        });
+        
+        // Load the vast model
+        gltfLoader.load(vastPath, function(gltf) {
+          const vastModel = gltf.scene;
+          // Position the vast model slightly offset from the origin
+          vastModel.position.set(1, 0, 0);
+          scene.add(vastModel);
+          renderer.render(scene, camera);
+          
+          console.log('vast.glb loaded');
+        }, undefined, function(error) {
+          console.error('Error loading vast.glb:', error);
         });
       });
 
