@@ -237,9 +237,37 @@
     gltfLoader.load(vastModelPath, function(gltf) {
       const vastModel = gltf.scene;
       vastModel.position.set(0, 0, 0);
+      
+      // Setup animation mixer for the VAST model
+      mixer = new THREE.AnimationMixer(vastModel);
+      
+      // Find the "RIG" animation and play it in loop
+      const rigAnimation = gltf.animations.find(anim => anim.name === "RIG") || gltf.animations[0];
+      if (rigAnimation) {
+        const action = mixer.clipAction(rigAnimation);
+        action.loop = THREE.LoopRepeat;
+        action.clampWhenFinished = false;
+        action.play();
+        console.log('Playing RIG animation in loop');
+      } else {
+        console.warn('RIG animation not found, playing first available animation');
+        if (gltf.animations.length > 0) {
+          const action = mixer.clipAction(gltf.animations[0]);
+          action.loop = THREE.LoopRepeat;
+          action.play();
+        }
+      }
+      
       scene.add(vastModel);
-      console.log('VAST model loaded');
-    }, undefined, function(error) {
+      console.log('VAST model loaded with animations:', gltf.animations.map(a => a.name).join(', '));
+      contentLoaded = true;
+    }, 
+    // Progress callback
+    function(xhr) {
+      console.log('VAST model loading: ' + (xhr.loaded / xhr.total * 100) + '% loaded');
+    }, 
+    // Error callback
+    function(error) {
       console.error('Error loading VAST model:', error);
     });
 
@@ -250,28 +278,14 @@
         scene.environment = texture;
         renderer.render(scene, camera);
 
-        // model
-        const gltfLoader = new THREE.GLTFLoader();
-        gltfLoader.load(logoPath, async function(gltf) {
-          logo = gltf.scene;
-
-          mixer = new THREE.AnimationMixer(gltf.scene);
-          var action = mixer.clipAction(gltf.animations[0]);
-          action.play();
-
-          scene.add(logo);
-          renderer.render(scene, camera);
-
-          contentLoaded = true;
-        }, undefined, function(error) {
-          console.error(error);
-        });
+        // We've moved the VAST model loading outside this callback
+        // to avoid potential rendering issues
       });
 
-    const ambient = new THREE.AmbientLight(0x404040); // soft white light
+    const ambient = new THREE.AmbientLight(0x404040, 2); // Increased intensity for better visibility
     scene.add(ambient);
 
-    let directional = new THREE.DirectionalLight(0xffff00, 5);
+    let directional = new THREE.DirectionalLight(0xffffff, 3); // Changed color and intensity
     directional.position.set(-1, 1, 0);
     scene.add(directional);
   }
@@ -279,7 +293,11 @@
   function updateContent() {
     let dt = clock.getDelta();
     let t = clock.getElapsedTime();
-    if (mixer) mixer.update(dt);
+    
+    // Update the animation mixer if it exists
+    if (mixer) {
+      mixer.update(dt);
+    }
 
     if (plyLoaded) {
       const attributes = pcgeo.attributes;
