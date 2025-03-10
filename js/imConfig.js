@@ -1,6 +1,6 @@
 export const immersalParams = {
     developerToken: "099e558e3e93cc97c4a3b2d71f09fc5113cca8567e0d02f8a61ff102ee16a815", // INSERT YOUR DEVELOPER TOKEN HERE
-    mapIds: [120385],  // INSERT YOUR MAP ID/IDS HERE
+    mapIds: [120423],  // INSERT YOUR MAP ID/IDS HERE
     continuousLocalization: true,
     continuousInterval: 16, // ms
     imageDownScale: 0.25,
