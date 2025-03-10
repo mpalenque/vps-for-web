@@ -268,13 +268,23 @@
         // Load the vast model
         gltfLoader.load(vastPath, function(gltf) {
           const vastModel = gltf.scene;
-          // Position the vast model slightly offset from the origin
-          vastModel.position.set(1, 0, 0);
+          // Scale the vast model to make it more visible
+          vastModel.scale.set(1, 1, 1);
+          // Position the vast model in a clearly visible location
+          vastModel.position.set(0, 1, -3);
           scene.add(vastModel);
-          renderer.render(scene, camera);
           
-          console.log('vast.glb loaded');
-        }, undefined, function(error) {
+          // Log model was added to help with debugging
+          console.log('vast.glb loaded and added to scene');
+          
+          // Ensure the model is rendered immediately
+          renderer.render(scene, camera);
+        }, 
+        // Loading progress callback
+        function(xhr) {
+          console.log('vast.glb loading: ' + (xhr.loaded / xhr.total * 100) + '%');
+        },
+        function(error) {
           console.error('Error loading vast.glb:', error);
         });
       });
