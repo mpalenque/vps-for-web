@@ -231,6 +231,13 @@
   function loadContent() {
     let logoPath = './assets/immersal_LOGO.glb';
 
+    // Add a red cube at position 0,0,0
+    const geometry = new THREE.BoxGeometry(0.5, 0.5, 0.5);
+    const material = new THREE.MeshStandardMaterial({ color: 0xff0000 });
+    const cube = new THREE.Mesh(geometry, material);
+    cube.position.set(0, 0, 0);
+    scene.add(cube);
+
     new THREE.RGBELoader()
       .setPath('./assets/')
       .load('palermo_1k.hdr', function(texture) {
