@@ -56,7 +56,7 @@
   const QG = new THREE.Quaternion();
   
   let camera, scene, renderer, clock, pcgeo;
-  let logo, mixer;
+  let logo, mixer, vastMixer;
   let immersal;
   let mapHandle = -1;
   let pointCloud = null;
@@ -271,8 +271,17 @@
           // Scale the vast model to make it more visible
           vastModel.scale.set(1, 1, 1);
           // Position the vast model in a clearly visible location
-          vastModel.position.set(0, 1, -3);
+          vastModel.position.set(0, -9, -3);
           scene.add(vastModel);
+          
+          // Create animation mixer for the vast model
+          vastMixer = new THREE.AnimationMixer(gltf.scene);
+          // Find and play the animation called "animation"
+          if (gltf.animations.length > 0) {
+            const vastAnimation = vastMixer.clipAction(gltf.animations.find(anim => anim.name === "animation") || gltf.animations[0]);
+            vastAnimation.play();
+            console.log('vast.glb animation started');
+          }
           
           // Log model was added to help with debugging
           console.log('vast.glb loaded and added to scene');
@@ -301,6 +310,7 @@
     let dt = clock.getDelta();
     let t = clock.getElapsedTime();
     if (mixer) mixer.update(dt);
+    if (vastMixer) vastMixer.update(dt);
 
     if (plyLoaded) {
       const attributes = pcgeo.attributes;
