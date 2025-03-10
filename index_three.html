@@ -237,29 +237,28 @@
   function loadContent() {
     let logoPath = './assets/immersal_LOGO.glb';
     let vastModelPath = './assets/VAST.glb';
+    
+    // Load both models and ensure they're both visible
 
-    // Load the VAST.glb model at position 0,0,0
+    // Load the VAST.glb model
     const gltfLoader = new THREE.GLTFLoader();
     gltfLoader.load(vastModelPath, function(gltf) {
       const vastModel = gltf.scene;
       vastModel.position.set(0, 0, 0);
       
-      // Make sure the model is visible from any distance by scaling up its materials' visibility
+      // Make sure the model is visible from any distance
       vastModel.traverse(function(node) {
         if (node.isMesh) {
           if (node.material) {
-            // If it's an array of materials
             if (Array.isArray(node.material)) {
               node.material.forEach(material => {
                 if (material.transparent) {
-                  material.depthWrite = true; // Help with depth sorting
+                  material.depthWrite = true;
                 }
               });
-            } 
-            // If it's a single material
-            else {
+            } else {
               if (node.material.transparent) {
-                node.material.depthWrite = true; // Help with depth sorting
+                node.material.depthWrite = true;
               }
             }
           }
@@ -288,15 +287,47 @@
       
       scene.add(vastModel);
       console.log('VAST model loaded with animations:', gltf.animations.map(a => a.name).join(', '));
+    });
+    
+    // Load the Immersal logo separately with its own loader
+    const logoLoader = new THREE.GLTFLoader();
+    logoLoader.load(logoPath, function(gltf) {
+      logo = gltf.scene;
+      
+      // Position the logo so it doesn't overlap with VAST model
+      logo.position.set(0, 2, 0); // Position it 2 units above the VAST model
+      
+      // Make the logo more visible
+      logo.traverse(function(node) {
+        if (node.isMesh) {
+          if (node.material) {
+            if (Array.isArray(node.material)) {
+              node.material.forEach(material => {
+                material.emissive = new THREE.Color(0x333333);
+                material.emissiveIntensity = 0.5;
+              });
+            } else {
+              node.material.emissive = new THREE.Color(0x333333);
+              node.material.emissiveIntensity = 0.5;
+            }
+          }
+        }
+      });
+      
+      // Add animation for the logo if it has any
+      if (gltf.animations && gltf.animations.length > 0) {
+        const logoMixer = new THREE.AnimationMixer(logo);
+        const logoAction = logoMixer.clipAction(gltf.animations[0]);
+        logoAction.loop = THREE.LoopRepeat;
+        logoAction.play();
+        
+        // Store the logo mixer to update it in the animation loop
+        logo.userData.mixer = logoMixer;
+      }
+      
+      scene.add(logo);
+      console.log('Immersal logo loaded');
       contentLoaded = true;
-    }, 
-    // Progress callback
-    function(xhr) {
-      console.log('VAST model loading: ' + (xhr.loaded / xhr.total * 100) + '% loaded');
-    }, 
-    // Error callback
-    function(error) {
-      console.error('Error loading VAST model:', error);
     });
 
     new THREE.RGBELoader()
@@ -305,15 +336,12 @@
         texture.mapping = THREE.EquirectangularReflectionMapping;
         scene.environment = texture;
         renderer.render(scene, camera);
-
-        // We've moved the VAST model loading outside this callback
-        // to avoid potential rendering issues
       });
 
-    const ambient = new THREE.AmbientLight(0x404040, 2); // Increased intensity for better visibility
+    const ambient = new THREE.AmbientLight(0x404040, 2);
     scene.add(ambient);
 
-    let directional = new THREE.DirectionalLight(0xffffff, 3); // Changed color and intensity
+    let directional = new THREE.DirectionalLight(0xffffff, 3);
     directional.position.set(-1, 1, 0);
     scene.add(directional);
   }
@@ -322,9 +350,17 @@
     let dt = clock.getDelta();
     let t = clock.getElapsedTime();
     
-    // Update the animation mixer if it exists
+    // Update the VAST model animation mixer if it exists
     if (mixer) {
       mixer.update(dt);
+    }
+    
+    // Update the logo animation if it exists
+    if (logo && logo.userData.mixer) {
+      logo.userData.mixer.update(dt);
+      
+      // Make the logo rotate slowly for better visibility
+      logo.rotation.y += 0.005;
     }
 
     if (plyLoaded) {
