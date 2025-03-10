@@ -230,13 +230,18 @@
 
   function loadContent() {
     let logoPath = './assets/immersal_LOGO.glb';
+    let vastModelPath = './assets/VAST.glb';
 
-    // Add a red cube at position 0,0,0
-    const geometry = new THREE.BoxGeometry(0.5, 0.5, 0.5);
-    const material = new THREE.MeshStandardMaterial({ color: 0xff0000 });
-    const cube = new THREE.Mesh(geometry, material);
-    cube.position.set(0, 0, 0);
-    scene.add(cube);
+    // Load the VAST.glb model at position 0,0,0
+    const gltfLoader = new THREE.GLTFLoader();
+    gltfLoader.load(vastModelPath, function(gltf) {
+      const vastModel = gltf.scene;
+      vastModel.position.set(0, 0, 0);
+      scene.add(vastModel);
+      console.log('VAST model loaded');
+    }, undefined, function(error) {
+      console.error('Error loading VAST model:', error);
+    });
 
     new THREE.RGBELoader()
       .setPath('./assets/')
