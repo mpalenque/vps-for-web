@@ -101,36 +101,55 @@
   const init = async () => {
     const mapId = immersalParams.mapIds[0];
 
-    immersal = await Immersal.Initialize(container, immersalParams);
-    mapHandle = await immersal.loadMap(mapId);
+    try {
+      console.log("Initializing Immersal with map ID:", mapId);
+      immersal = await Immersal.Initialize(container, immersalParams);
+      console.log("Immersal initialized successfully");
+      
+      mapHandle = await immersal.loadMap(mapId);
+      console.log(`Map handle received: ${mapHandle}`);
 
-    //await immersal.freeMap(mapHandle);
+      //await immersal.freeMap(mapHandle);
 
-    camera = new THREE.PerspectiveCamera(45, window.innerWidth / window.innerHeight, 0.001, 10000);
-    scene = new THREE.Scene();
+      camera = new THREE.PerspectiveCamera(45, window.innerWidth / window.innerHeight, 0.001, 10000);
+      scene = new THREE.Scene();
 
-    // renderer
-    renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
-    renderer.setPixelRatio(window.devicePixelRatio);
-    renderer.toneMapping = THREE.ACESFilmicToneMapping;
-    renderer.toneMappingExposure = 1;
+      // renderer
+      renderer = new THREE.WebGLRenderer({ 
+        antialias: true, 
+        alpha: true,
+        preserveDrawingBuffer: true 
+      });
+      renderer.setPixelRatio(window.devicePixelRatio);
+      renderer.toneMapping = THREE.ACESFilmicToneMapping;
+      renderer.toneMappingExposure = 1;
 
-    resize();
+      resize();
 
-    container.appendChild(renderer.domElement);
+      container.appendChild(renderer.domElement);
 
-    immersal.addEventListener('resize', resize);
+      immersal.addEventListener('resize', resize);
+      immersal.addEventListener('localized', onLocalized);
 
-    // content
-    loadPLY(mapId);
-    loadContent();
+      // content
+      loadPLY(mapId);
+      loadContent();
 
-    uiContainer.style.display = "block";
+      uiContainer.style.display = "block";
 
-    // clock
-    clock = new THREE.Clock();
+      // clock
+      clock = new THREE.Clock();
 
-    animate();
+      animate();
+    } catch (error) {
+      console.error("Error during initialization:", error);
+    }
+  }
+
+  // Add function to handle localization events
+  function onLocalized(event) {
+    console.log("Localization event:", event);
+    console.log("Pose data:", event.detail);
   }
 
   permButton.addEventListener("click", function(e) {
@@ -143,12 +162,18 @@
 
   locButton.addEventListener("click", function(e) {
     if (immersal) {
+      console.log("Starting on-device localization...");
       immersal.localizeDeviceAsync()
       .then(result => {
         console.log(`[IMMERSAL] On-device localization result:`, result);
+        // Force a pose update if successful
+        if (result && result.success) {
+          const timestamp = performance.now();
+          immersal.localizeDevice(timestamp);
+        }
       })
       .catch(e => {
-        console.log(e);
+        console.error("Localization error:", e);
       });
     }
   });
@@ -183,54 +208,61 @@
     const dt = timestamp - prevTime;
     prevTime = timestamp;
 
-    if (mapHandle >= 0 && immersal.continuousLocalization) {
-      immersal.localizeDevice(timestamp);
-    }
+    try {
+      if (mapHandle >= 0 && immersal && immersal.continuousLocalization) {
+        immersal.localizeDevice(timestamp);
+      }
 
-    if (immersal.localization.counter > 1) {
-      camera.fov = immersal.getVFov();
-      camera.updateProjectionMatrix();
+      if (immersal && immersal.localization && immersal.localization.counter > 1) {
+        camera.fov = immersal.getVFov();
+        camera.updateProjectionMatrix();
 
-      const {position, rotation, elapsedTime, wgs84} = immersal.localizeInfo;
+        const {position, rotation, elapsedTime, wgs84} = immersal.localizeInfo;
 
-      if (immersal.continuousLocalization) {
-        const {position, rotation} = immersal.getEstimatedPose(timestamp);
+        if (immersal.continuousLocalization) {
+          const pose = immersal.getEstimatedPose(timestamp);
+          if (pose && pose.position && pose.rotation) {
+            P.set(pose.position[0], pose.position[1], pose.position[2]);
+            Q.set(pose.rotation[0], pose.rotation[1], pose.rotation[2], pose.rotation[3]);
+            
+            if (immersal.gyroData) {
+              QG.set(immersal.gyroData.x, immersal.gyroData.y, immersal.gyroData.z, immersal.gyroData.w);
+              Q.multiply(QG);
+            }
 
-        P.set(position[0], position[1], position[2]);
-        Q.set(rotation[0], rotation[1], rotation[2], rotation[3]);
-        QG.set(immersal.gyroData.x, immersal.gyroData.y, immersal.gyroData.z, immersal.gyroData.w);
-        Q.multiply(QG);
+            if (USE_FILTERING) {
+              let step = 0.025 * dt;
+              if (step > 1.0)
+                step = 1.0;
 
-        if (USE_FILTERING) {
-          let step = 0.025 * dt;
-          if (step > 1.0)
-            step = 1.0;
-
-          camera.position.lerp(P, step);
-          camera.quaternion.set(Q.x, Q.y, Q.z, Q.w);
+              camera.position.lerp(P, step);
+              camera.quaternion.set(Q.x, Q.y, Q.z, Q.w);
+            } else {
+              camera.position.set(P.x, P.y, P.z);
+              camera.quaternion.set(Q.x, Q.y, Q.z, Q.w);
+            }
+          }
         } else {
+          P.set(position.x, position.y, position.z);
+          Q.set(rotation.x, rotation.y, rotation.z, rotation.w);
+          QG.set(immersal.gyroData.x, immersal.gyroData.y, immersal.gyroData.z, immersal.gyroData.w);
+          Q.multiply(QG);
           camera.position.set(P.x, P.y, P.z);
           camera.quaternion.set(Q.x, Q.y, Q.z, Q.w);
         }
-      } else {
-        P.set(position.x, position.y, position.z);
-        Q.set(rotation.x, rotation.y, rotation.z, rotation.w);
-        QG.set(immersal.gyroData.x, immersal.gyroData.y, immersal.gyroData.z, immersal.gyroData.w);
-        Q.multiply(QG);
-        camera.position.set(P.x, P.y, P.z);
-        camera.quaternion.set(Q.x, Q.y, Q.z, Q.w);
+
+        if (wgs84) {
+          lat.innerHTML = wgs84.latitude.toFixed(5);
+          lon.innerHTML = wgs84.longitude.toFixed(5);
+          alt.innerHTML = wgs84.altitude.toFixed(5);
+        }
       }
 
-      lat.innerHTML = wgs84.latitude.toFixed(5);
-      lon.innerHTML = wgs84.longitude.toFixed(5);
-      alt.innerHTML = wgs84.altitude.toFixed(5);
-
-      //console.log(`latitude: ${wgs84.latitude}, longitude: ${wgs84.longitude}, altitude: ${wgs84.altitude}`);
+      updateContent();
+      renderer.render(scene, camera);
+    } catch (error) {
+      console.error("Render error:", error);
     }
-
-    updateContent();
-
-    renderer.render(scene, camera);
   }
 
   // Load a .ply file from Immersal to visualize localization.
@@ -342,10 +374,12 @@
 
     if (mapId !== -1) {
       immersalParams.mapIds[0] = mapId;
+      console.log("Using map ID from URL:", mapId);
     }
 
     if (token !== null) {
       immersalParams.developerToken = token;
+      console.log("Using token from URL");
     }
   });
 
