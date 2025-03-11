@@ -34,6 +34,7 @@
     <button id="locServerButton" class="button">Localize on server</button>
   </div>
   <div id="latlon">lat: <span id="latitude">0</span>, lon: <span id="longitude">0</span>, alt: <span id="altitude">0</span></div>
+  <div id="locStatus" style="color: white; background-color: rgba(0,0,0,0.5); padding: 5px; margin-top: 5px;">Status: Waiting for initialization</div>
 </div>
 <div style="
   position: fixed;
@@ -84,6 +85,7 @@
   const lat = document.getElementById("latitude");
   const lon = document.getElementById("longitude");
   const alt = document.getElementById("altitude");
+  const statusDisplay = document.getElementById("locStatus");
 
   const P = new THREE.Vector3();
   const Q = new THREE.Quaternion();
@@ -101,55 +103,138 @@
   const init = async () => {
     const mapId = immersalParams.mapIds[0];
 
-    immersal = await Immersal.Initialize(container, immersalParams);
-    mapHandle = await immersal.loadMap(mapId);
+    try {
+      statusDisplay.innerText = "Status: Initializing Immersal...";
+      console.log("Initializing Immersal with map ID:", mapId);
+      
+      // Make sure we have all correct permissions
+      if (navigator.mediaDevices && navigator.mediaDevices.getUserMedia) {
+        try {
+          const stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment' } });
+          console.log("Camera permission granted:", stream);
+          // Stop the stream as Immersal will request it again
+          stream.getTracks().forEach(track => track.stop());
+        } catch (err) {
+          console.error("Camera permission error:", err);
+          statusDisplay.innerText = "Status: Camera error - " + err.message;
+        }
+      }
+      
+      immersal = await Immersal.Initialize(container, immersalParams);
+      console.log("Immersal initialized");
+      statusDisplay.innerText = "Status: Immersal initialized, loading map...";
+      
+      mapHandle = await immersal.loadMap(mapId);
+      console.log(`Map handle: ${mapHandle}`);
+      statusDisplay.innerText = `Status: Map loaded (handle: ${mapHandle})`;
 
-    //await immersal.freeMap(mapHandle);
+      // Add event listeners for Immersal events
+      immersal.addEventListener('localized', function(e) {
+        console.log("Localization success event:", e.detail);
+        statusDisplay.innerText = "Status: Localized successfully";
+      });
+      
+      immersal.addEventListener('localization-failed', function(e) {
+        console.log("Localization failed event:", e.detail);
+        statusDisplay.innerText = "Status: Localization failed - " + (e.detail.error || "unknown error");
+      });
 
-    camera = new THREE.PerspectiveCamera(45, window.innerWidth / window.innerHeight, 0.001, 10000);
-    scene = new THREE.Scene();
+      camera = new THREE.PerspectiveCamera(45, window.innerWidth / window.innerHeight, 0.001, 10000);
+      scene = new THREE.Scene();
 
-    // renderer
-    renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
-    renderer.setPixelRatio(window.devicePixelRatio);
-    renderer.toneMapping = THREE.ACESFilmicToneMapping;
-    renderer.toneMappingExposure = 1;
+      // renderer
+      renderer = new THREE.WebGLRenderer({ 
+        antialias: true, 
+        alpha: true,
+        preserveDrawingBuffer: true 
+      });
+      renderer.setPixelRatio(window.devicePixelRatio);
+      renderer.toneMapping = THREE.ACESFilmicToneMapping;
+      renderer.toneMappingExposure = 1;
 
-    resize();
+      resize();
 
-    container.appendChild(renderer.domElement);
+      container.appendChild(renderer.domElement);
 
-    immersal.addEventListener('resize', resize);
+      immersal.addEventListener('resize', resize);
 
-    // content
-    loadPLY(mapId);
-    loadContent();
+      // content
+      loadPLY(mapId);
+      loadContent();
 
-    uiContainer.style.display = "block";
+      uiContainer.style.display = "block";
 
-    // clock
-    clock = new THREE.Clock();
+      // clock
+      clock = new THREE.Clock();
 
-    animate();
+      animate();
+      
+      // Force an initial localization attempt after a short delay
+      setTimeout(() => {
+        statusDisplay.innerText = "Status: Starting initial localization...";
+        immersal.localizeDeviceAsync()
+          .then(result => {
+            console.log("Initial localization result:", result);
+            if (result && result.success) {
+              statusDisplay.innerText = "Status: Initial localization successful";
+            } else {
+              statusDisplay.innerText = "Status: Initial localization failed";
+            }
+          })
+          .catch(e => {
+            console.error("Initial localization error:", e);
+            statusDisplay.innerText = "Status: Initial localization error";
+          });
+      }, 2000);
+      
+    } catch (error) {
+      console.error("Initialization error:", error);
+      statusDisplay.innerText = "Status: Initialization error - " + error.message;
+    }
   }
 
   permButton.addEventListener("click", function(e) {
     createOrientationSensor().then(() => {
       permButton.style.visibility = "hidden";
       document.getElementById("enterArText").style.display = "none";
+      statusDisplay.innerText = "Status: Starting initialization...";
       init();
+    }).catch(error => {
+      console.error("Orientation sensor error:", error);
+      statusDisplay.innerText = "Status: Orientation sensor error - " + error.message;
     });
   });
 
   locButton.addEventListener("click", function(e) {
     if (immersal) {
+      statusDisplay.innerText = "Status: Localizing on device...";
+      console.log("Starting on-device localization...");
+      
       immersal.localizeDeviceAsync()
       .then(result => {
         console.log(`[IMMERSAL] On-device localization result:`, result);
+        if (result && result.success) {
+          statusDisplay.innerText = "Status: Localization successful";
+          
+          // Try to manually update the camera position after localization
+          if (immersal.localizeInfo && immersal.localizeInfo.position) {
+            const pos = immersal.localizeInfo.position;
+            const rot = immersal.localizeInfo.rotation;
+            
+            console.log("Setting camera to position:", pos);
+            camera.position.set(pos.x, pos.y, pos.z);
+            camera.quaternion.set(rot.x, rot.y, rot.z, rot.w);
+          }
+        } else {
+          statusDisplay.innerText = "Status: Localization failed";
+        }
       })
       .catch(e => {
-        console.log(e);
+        console.error("Localization error:", e);
+        statusDisplay.innerText = "Status: Localization error - " + e.message;
       });
+    } else {
+      statusDisplay.innerText = "Status: Immersal not initialized";
     }
   });
 
@@ -183,54 +268,79 @@
     const dt = timestamp - prevTime;
     prevTime = timestamp;
 
-    if (mapHandle >= 0 && immersal.continuousLocalization) {
-      immersal.localizeDevice(timestamp);
-    }
+    try {
+      if (mapHandle >= 0 && immersal && immersal.continuousLocalization) {
+        immersal.localizeDevice(timestamp);
+      }
 
-    if (immersal.localization.counter > 1) {
-      camera.fov = immersal.getVFov();
-      camera.updateProjectionMatrix();
+      if (immersal && immersal.localization && immersal.localization.counter > 1) {
+        camera.fov = immersal.getVFov();
+        camera.updateProjectionMatrix();
 
-      const {position, rotation, elapsedTime, wgs84} = immersal.localizeInfo;
+        // Debug print every 1 second
+        if (Math.floor(timestamp / 1000) !== Math.floor(prevTime / 1000)) {
+          console.log("Localization count:", immersal.localization.counter);
+          console.log("Camera position:", camera.position);
+        }
+        
+        const {position, rotation, elapsedTime, wgs84} = immersal.localizeInfo;
 
-      if (immersal.continuousLocalization) {
-        const {position, rotation} = immersal.getEstimatedPose(timestamp);
+        if (immersal.continuousLocalization) {
+          try {
+            const pose = immersal.getEstimatedPose(timestamp);
+            
+            if (pose && pose.position && pose.rotation) {
+              P.set(pose.position[0], pose.position[1], pose.position[2]);
+              Q.set(pose.rotation[0], pose.rotation[1], pose.rotation[2], pose.rotation[3]);
+              
+              if (immersal.gyroData) {
+                QG.set(immersal.gyroData.x, immersal.gyroData.y, immersal.gyroData.z, immersal.gyroData.w);
+                Q.multiply(QG);
+              }
 
-        P.set(position[0], position[1], position[2]);
-        Q.set(rotation[0], rotation[1], rotation[2], rotation[3]);
-        QG.set(immersal.gyroData.x, immersal.gyroData.y, immersal.gyroData.z, immersal.gyroData.w);
-        Q.multiply(QG);
+              if (USE_FILTERING) {
+                let step = 0.025 * dt;
+                if (step > 1.0) step = 1.0;
 
-        if (USE_FILTERING) {
-          let step = 0.025 * dt;
-          if (step > 1.0)
-            step = 1.0;
-
-          camera.position.lerp(P, step);
-          camera.quaternion.set(Q.x, Q.y, Q.z, Q.w);
+                camera.position.lerp(P, step);
+                camera.quaternion.slerp(Q, step);
+              } else {
+                camera.position.set(P.x, P.y, P.z);
+                camera.quaternion.set(Q.x, Q.y, Q.z, Q.w);
+              }
+            } else {
+              console.warn("Invalid pose data:", pose);
+            }
+          } catch (err) {
+            console.error("Error in pose estimation:", err);
+          }
         } else {
+          P.set(position.x, position.y, position.z);
+          Q.set(rotation.x, rotation.y, rotation.z, rotation.w);
+          QG.set(immersal.gyroData.x, immersal.gyroData.y, immersal.gyroData.z, immersal.gyroData.w);
+          Q.multiply(QG);
           camera.position.set(P.x, P.y, P.z);
           camera.quaternion.set(Q.x, Q.y, Q.z, Q.w);
         }
-      } else {
-        P.set(position.x, position.y, position.z);
-        Q.set(rotation.x, rotation.y, rotation.z, rotation.w);
-        QG.set(immersal.gyroData.x, immersal.gyroData.y, immersal.gyroData.z, immersal.gyroData.w);
-        Q.multiply(QG);
-        camera.position.set(P.x, P.y, P.z);
-        camera.quaternion.set(Q.x, Q.y, Q.z, Q.w);
+
+        if (wgs84) {
+          lat.innerHTML = wgs84.latitude.toFixed(5);
+          lon.innerHTML = wgs84.longitude.toFixed(5);
+          alt.innerHTML = wgs84.altitude.toFixed(5);
+        }
+      } else if (immersal && immersal.localization) {
+        // No localization yet
+        if (Math.floor(timestamp / 5000) !== Math.floor(prevTime / 5000)) {
+          console.log("Waiting for localization, counter:", 
+            immersal.localization ? immersal.localization.counter : "undefined");
+        }
       }
 
-      lat.innerHTML = wgs84.latitude.toFixed(5);
-      lon.innerHTML = wgs84.longitude.toFixed(5);
-      alt.innerHTML = wgs84.altitude.toFixed(5);
-
-      //console.log(`latitude: ${wgs84.latitude}, longitude: ${wgs84.longitude}, altitude: ${wgs84.altitude}`);
+      updateContent();
+      renderer.render(scene, camera);
+    } catch (error) {
+      console.error("Render error:", error);
     }
-
-    updateContent();
-
-    renderer.render(scene, camera);
   }
 
   // Load a .ply file from Immersal to visualize localization.
@@ -324,6 +434,27 @@
     }  
   }
 
+  // Add a function to check the map validity
+  function checkMap(mapId) {
+    console.log(`Checking map: [${mapId}]`);
+    const checkUrl = Immersal.BASE_URL + '/map/get' + '?token=' + immersalParams.developerToken + '&id=' + mapId;
+    
+    fetch(checkUrl)
+      .then(response => response.json())
+      .then(data => {
+        console.log("Map check result:", data);
+        if (data && data.error === "none") {
+          statusDisplay.innerText = `Status: Map verified - ${data.name || mapId}`;
+        } else {
+          statusDisplay.innerText = `Status: Map error - ${data.error || "unknown"}`;
+        }
+      })
+      .catch(error => {
+        console.error("Map check error:", error);
+        statusDisplay.innerText = "Status: Map check error";
+      });
+  }
+
   document.addEventListener("DOMContentLoaded", (e) => {
     let s = location.search.substring(1);
     let mapId = -1;
@@ -342,10 +473,15 @@
 
     if (mapId !== -1) {
       immersalParams.mapIds[0] = mapId;
+      console.log("Using map ID from URL:", mapId);
+      statusDisplay.innerText = `Status: Using map ID: ${mapId}`;
+      // Check if the map exists and is valid
+      checkMap(mapId);
     }
 
     if (token !== null) {
       immersalParams.developerToken = token;
+      console.log("Using token from URL");
     }
   });
 
