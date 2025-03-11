@@ -92,7 +92,7 @@
   const QG = new THREE.Quaternion();
   
   let camera, scene, renderer, clock, pcgeo;
-  let logo, mixer;
+  let logo, mixer, vastModel, vastMixer;
   let immersal;
   let mapHandle = -1;
   let pointCloud = null;
@@ -375,6 +375,7 @@
 
   function loadContent() {
     let logoPath = './assets/immersal_LOGO.glb';
+    let vastPath = './assets/vast.glb';
 
     // Add a red cube at position 0,0,0
     const geometry = new THREE.BoxGeometry(0.5, 0.5, 0.5);
@@ -408,6 +409,44 @@
         }, undefined, function(error) {
           console.error(error);
         });
+        
+        // Load the vast model
+        gltfLoader.load(vastPath, function(gltf) {
+          vastModel = gltf.scene;
+          // Scale and position the vast model
+          vastModel.scale.set(1, 1, 1);
+          vastModel.position.set(0, 0, 0);
+          scene.add(vastModel);
+          
+          console.log("Vast animations:", gltf.animations);
+          
+          // Create animation mixer for the vast model
+          vastMixer = new THREE.AnimationMixer(gltf.scene);
+          
+          // Find and play the animations in a loop
+          if (gltf.animations && gltf.animations.length > 0) {
+            // Get the primary animation or the first one available
+            const vastAnimation = vastMixer.clipAction(gltf.animations[0]);
+            // Set to loop indefinitely
+            vastAnimation.loop = THREE.LoopRepeat;
+            vastAnimation.clampWhenFinished = false;
+            vastAnimation.play();
+            console.log('vast.glb animation started in loop mode');
+          } else {
+            console.warn('No animations found in vast.glb');
+          }
+          
+          renderer.render(scene, camera);
+        }, 
+        // Loading progress callback
+        function(xhr) {
+          console.log('vast.glb loading: ' + (xhr.loaded / xhr.total * 100) + '%');
+          statusDisplay.innerText = `Status: Loading vast model: ${Math.floor(xhr.loaded / xhr.total * 100)}%`;
+        },
+        function(error) {
+          console.error('Error loading vast.glb:', error);
+          statusDisplay.innerText = 'Status: Error loading vast model';
+        });
       });
 
     const ambient = new THREE.AmbientLight(0x404040); // soft white light
@@ -422,6 +461,7 @@
     let dt = clock.getDelta();
     let t = clock.getElapsedTime();
     if (mixer) mixer.update(dt);
+    if (vastMixer) vastMixer.update(dt);
 
     if (plyLoaded) {
       const attributes = pcgeo.attributes;
