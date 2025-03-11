@@ -13,6 +13,7 @@
 <script src="//cdnjs.cloudflare.com/ajax/libs/three.js/r123/three.min.js"></script>
 <script src="//cdn.jsdelivr.net/gh/mrdoob/three.js@r123/examples/js/loaders/PLYLoader.js"></script>
 <script src="//cdn.jsdelivr.net/gh/mrdoob/three.js@r123/examples/js/loaders/GLTFLoader.js"></script>
+<script src="//cdn.jsdelivr.net/gh/mrdoob/three.js@r123/examples/js/loaders/DRACOLoader.js"></script>
 <script src="//cdn.jsdelivr.net/gh/mrdoob/three.js@r123/examples/js/loaders/RGBELoader.js"></script>
 </head>
 
@@ -391,8 +392,13 @@
         scene.environment = texture;
         renderer.render(scene, camera);
 
-        // model
+        // Setup DRACOLoader for compressed models
+        const dracoLoader = new THREE.DRACOLoader();
+        dracoLoader.setDecoderPath('//cdn.jsdelivr.net/gh/mrdoob/three.js@r123/examples/js/libs/draco/');
+        
+        // model loader with DRACO support
         const gltfLoader = new THREE.GLTFLoader();
+        gltfLoader.setDRACOLoader(dracoLoader);
         
         // Load the logo model
         gltfLoader.load(logoPath, async function(gltf) {
