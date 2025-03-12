@@ -422,25 +422,30 @@
           // Scale and position the vast model
           vastModel.scale.set(1, 1, 1);
           vastModel.position.set(0, 0, 0);
+          
+          // Ensure all meshes in the model have proper rendering settings
+          vastModel.traverse(function(node) {
+            if (node.isMesh) {
+              node.frustumCulled = false; // Prevent disappearing due to frustum culling
+              node.material.side = THREE.DoubleSide; // Render both sides
+              node.material.transparent = true;
+              node.material.opacity = 1.0;
+              node.material.depthTest = true;
+              node.material.needsUpdate = true;
+              node.visible = true;
+              node.renderOrder = 1000; // Higher render order to ensure it's drawn
+              
+              // Force the shader to update
+              if (node.material.map) {
+                node.material.map.needsUpdate = true;
+              }
+            }
+          });
+          
+          // Add to scene with explicit visibility setting
+          vastModel.visible = true;
           scene.add(vastModel);
-          
-          console.log("Vast animations:", gltf.animations);
-          
-          // Create animation mixer for the vast model
-          vastMixer = new THREE.AnimationMixer(gltf.scene);
-          
-          // Find and play the animations in a loop
-          if (gltf.animations && gltf.animations.length > 0) {
-            // Get the primary animation or the first one available
-            const vastAnimation = vastMixer.clipAction(gltf.animations[0]);
-            // Set to loop indefinitely
-            vastAnimation.loop = THREE.LoopRepeat;
-            vastAnimation.clampWhenFinished = false;
-            vastAnimation.play();
-            console.log('vast.glb animation started in loop mode');
-          } else {
-            console.warn('No animations found in vast.glb');
-          }
+          console.log("Vast model added to scene with visibility:", vastModel.visible);
           
           renderer.render(scene, camera);
         }, 
@@ -468,6 +473,15 @@
     let t = clock.getElapsedTime();
     if (mixer) mixer.update(dt);
     if (vastMixer) vastMixer.update(dt);
+    
+    // Ensure vast model remains visible
+    if (vastModel && !vastModel.visible) {
+      vastModel.visible = true;
+      vastModel.traverse(node => {
+        if (node.isMesh) node.visible = true;
+      });
+      console.log("Restored vast model visibility at time:", t);
+    }
 
     if (plyLoaded) {
       const attributes = pcgeo.attributes;
