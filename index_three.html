@@ -423,6 +423,18 @@
           vastModel.scale.set(1, 1, 1);
           vastModel.position.set(0, 0, 0);
           
+          // Setup animation for vast model
+          if (gltf.animations && gltf.animations.length > 0) {
+            vastMixer = new THREE.AnimationMixer(gltf.scene);
+            gltf.animations.forEach(clip => {
+              const action = vastMixer.clipAction(clip);
+              action.play();
+            });
+            console.log(`Started playing ${gltf.animations.length} animations for vast model`);
+          } else {
+            console.log("No animations found in vast model");
+          }
+          
           // Ensure all meshes in the model have proper rendering settings
           vastModel.traverse(function(node) {
             if (node.isMesh) {
