@@ -53,7 +53,7 @@ class Immersal extends EventTarget {
   developerToken;
   mapIds;
   continuousInterval;
-  imageDownScale = 0.25;
+  imageDownScale = 0.75;
   solverType = 0;
 
   get continuousLocalization() {
