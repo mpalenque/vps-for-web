@@ -94,6 +94,7 @@
   
   let camera, scene, renderer, clock, pcgeo;
   let logo, mixer, vastModel, vastMixer;
+  let vastCuartoModel, vastCuartoMixer, maskCuartoModel;
   let immersal;
   let mapHandle = -1;
   let pointCloud = null;
@@ -377,6 +378,8 @@
   function loadContent() {
     let logoPath = './assets/immersal_LOGO.glb';
     let vastPath = './assets/vast.glb';
+    let vastCuartoPath = './assets/vastcuarto.glb';
+    let maskCuartoPath = './assets/maskcuarto.glb';
 
     // Add a red cube at position 0,0,0
     const geometry = new THREE.BoxGeometry(0.5, 0.5, 0.5);
@@ -470,6 +473,91 @@
           console.error('Error loading vast.glb:', error);
           statusDisplay.innerText = 'Status: Error loading vast model';
         });
+
+        // Load the vastcuarto model
+        gltfLoader.load(vastCuartoPath, function(gltf) {
+          vastCuartoModel = gltf.scene;
+          // Scale and position the vastcuarto model same as vast model
+          vastCuartoModel.scale.set(1, 1, 1);
+          vastCuartoModel.position.set(0, 2, 0); // Positioning slightly above the vast model for visibility
+          
+          // Setup animation for vastcuarto model
+          if (gltf.animations && gltf.animations.length > 0) {
+            vastCuartoMixer = new THREE.AnimationMixer(gltf.scene);
+            gltf.animations.forEach(clip => {
+              const action = vastCuartoMixer.clipAction(clip);
+              action.play();
+            });
+            console.log(`Started playing ${gltf.animations.length} animations for vastcuarto model`);
+          } else {
+            console.log("No animations found in vastcuarto model");
+          }
+          
+          // Apply same rendering settings as vast model
+          vastCuartoModel.traverse(function(node) {
+            if (node.isMesh) {
+              node.frustumCulled = false;
+              node.material.side = THREE.DoubleSide;
+              node.material.transparent = true;
+              node.material.opacity = 1.0;
+              node.material.depthTest = true;
+              node.material.needsUpdate = true;
+              node.visible = true;
+              node.renderOrder = 1000;
+              
+              if (node.material.map) {
+                node.material.map.needsUpdate = true;
+              }
+            }
+          });
+          
+          vastCuartoModel.visible = true;
+          scene.add(vastCuartoModel);
+          console.log("VastCuarto model added to scene with visibility:", vastCuartoModel.visible);
+          
+          renderer.render(scene, camera);
+        }, 
+        function(xhr) {
+          console.log('vastcuarto.glb loading: ' + (xhr.loaded / xhr.total * 100) + '%');
+        },
+        function(error) {
+          console.error('Error loading vastcuarto.glb:', error);
+        });
+
+        // Load the maskcuarto model with occlusion material
+        gltfLoader.load(maskCuartoPath, function(gltf) {
+          maskCuartoModel = gltf.scene;
+          // Scale and position
+          maskCuartoModel.scale.set(1, 1, 1);
+          maskCuartoModel.position.set(0, 0, 0);
+          
+          // Create and apply occlusion material
+          const occlusionMaterial = new THREE.MeshBasicMaterial({
+            colorWrite: false,  // Don't write color, only to depth buffer
+            depthWrite: true,   // Write to depth buffer
+            side: THREE.DoubleSide
+          });
+          
+          // Apply occlusion material to all mesh children
+          maskCuartoModel.traverse(function(node) {
+            if (node.isMesh) {
+              node.material = occlusionMaterial;
+              node.renderOrder = 0; // Lower render order so it's processed before other objects
+              node.frustumCulled = false;
+            }
+          });
+          
+          scene.add(maskCuartoModel);
+          console.log("MaskCuarto model added to scene as occlusion mask");
+          
+          renderer.render(scene, camera);
+        }, 
+        function(xhr) {
+          console.log('maskcuarto.glb loading: ' + (xhr.loaded / xhr.total * 100) + '%');
+        },
+        function(error) {
+          console.error('Error loading maskcuarto.glb:', error);
+        });
       });
 
     const ambient = new THREE.AmbientLight(0x404040); // soft white light
@@ -485,6 +573,7 @@
     let t = clock.getElapsedTime();
     if (mixer) mixer.update(dt);
     if (vastMixer) vastMixer.update(dt);
+    if (vastCuartoMixer) vastCuartoMixer.update(dt);
     
     // Ensure vast model remains visible
     if (vastModel && !vastModel.visible) {
@@ -493,6 +582,15 @@
         if (node.isMesh) node.visible = true;
       });
       console.log("Restored vast model visibility at time:", t);
+    }
+
+    // Ensure vastcuarto model remains visible
+    if (vastCuartoModel && !vastCuartoModel.visible) {
+      vastCuartoModel.visible = true;
+      vastCuartoModel.traverse(node => {
+        if (node.isMesh) node.visible = true;
+      });
+      console.log("Restored vastcuarto model visibility at time:", t);
     }
 
     if (plyLoaded) {
