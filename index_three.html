@@ -378,7 +378,10 @@
   function loadContent() {
     let logoPath = './assets/immersal_LOGO.glb';
     let vastPath = './assets/vast.glb';
-  
+    
+    // Define missing paths - remove references to them later if files don't exist
+    let vastCuartoPath = './assets/vastcuarto.glb'; // Added definition
+    let maskCuartoPath = './assets/maskcuarto.glb'; // Added definition
 
     // Add a red cube at position 0,0,0
     const geometry = new THREE.BoxGeometry(0.5, 0.5, 0.5);
@@ -418,145 +421,84 @@
           console.error(error);
         });
         
-        // Load the vast model
-        gltfLoader.load(vastPath, function(gltf) {
-          vastModel = gltf.scene;
-          // Scale and position the vast model
-          vastModel.scale.set(1, 1, 1);
-          vastModel.position.set(0, 0, 0);
-          
-          // Setup animation for vast model
-          if (gltf.animations && gltf.animations.length > 0) {
-            vastMixer = new THREE.AnimationMixer(gltf.scene);
-            gltf.animations.forEach(clip => {
-              const action = vastMixer.clipAction(clip);
-              action.play();
-            });
-            console.log(`Started playing ${gltf.animations.length} animations for vast model`);
-          } else {
-            console.log("No animations found in vast model");
-          }
-          
-          // Ensure all meshes in the model have proper rendering settings
-          vastModel.traverse(function(node) {
-            if (node.isMesh) {
-              node.frustumCulled = false; // Prevent disappearing due to frustum culling
-              node.material.side = THREE.DoubleSide; // Render both sides
-              node.material.transparent = true;
-              node.material.opacity = 1.0;
-              node.material.depthTest = true;
-              node.material.needsUpdate = true;
-              node.visible = true;
-              node.renderOrder = 1000; // Higher render order to ensure it's drawn
-              
-              // Force the shader to update
-              if (node.material.map) {
-                node.material.map.needsUpdate = true;
+        // Load the vast model with improved handling
+        console.log("Starting to load vast model from:", vastPath);
+        statusDisplay.innerText = "Status: Loading vast.glb...";
+        
+        gltfLoader.load(vastPath, 
+          // Success callback
+          function(gltf) {
+            console.log("Successfully loaded vast.glb");
+            vastModel = gltf.scene;
+            
+            // Scale and position the vast model
+            vastModel.scale.set(1, 1, 1);
+            vastModel.position.set(0, 0, -2); // Position it 2 units in front of camera
+            
+            // Setup animation for vast model
+            if (gltf.animations && gltf.animations.length > 0) {
+              vastMixer = new THREE.AnimationMixer(gltf.scene);
+              gltf.animations.forEach((clip, index) => {
+                const action = vastMixer.clipAction(clip);
+                action.play();
+                console.log(`Started animation ${index}: ${clip.name}`);
+              });
+              console.log(`Started playing ${gltf.animations.length} animations for vast model`);
+            } else {
+              console.log("No animations found in vast model");
+            }
+            
+            // Ensure all meshes in the model have proper rendering settings
+            vastModel.traverse(function(node) {
+              if (node.isMesh) {
+                node.frustumCulled = false; // Prevent disappearing due to frustum culling
+                node.material.side = THREE.DoubleSide; // Render both sides
+                node.material.transparent = true;
+                node.material.opacity = 1.0;
+                node.material.depthTest = true;
+                node.material.needsUpdate = true;
+                node.visible = true;
+                console.log("Processed mesh in vast model:", node.name);
               }
-            }
-          });
-          
-          // Add to scene with explicit visibility setting
-          vastModel.visible = true;
-          scene.add(vastModel);
-          console.log("Vast model added to scene with visibility:", vastModel.visible);
-          
-          renderer.render(scene, camera);
-        }, 
-        // Loading progress callback
-        function(xhr) {
-          console.log('vast.glb loading: ' + (xhr.loaded / xhr.total * 100) + '%');
-          statusDisplay.innerText = `Status: Loading vast model: ${Math.floor(xhr.loaded / xhr.total * 100)}%`;
-        },
-        function(error) {
-          console.error('Error loading vast.glb:', error);
-          statusDisplay.innerText = 'Status: Error loading vast model';
-        });
-
-        // Load the vastcuarto model
-        gltfLoader.load(vastCuartoPath, function(gltf) {
-          vastCuartoModel = gltf.scene;
-          // Scale and position the vastcuarto model same as vast model
-          vastCuartoModel.scale.set(1, 1, 1);
-          vastCuartoModel.position.set(0, 0, 0); // Positioning slightly above the vast model for visibility
-          
-          // Setup animation for vastcuarto model
-          if (gltf.animations && gltf.animations.length > 0) {
-            vastCuartoMixer = new THREE.AnimationMixer(gltf.scene);
-            gltf.animations.forEach(clip => {
-              const action = vastCuartoMixer.clipAction(clip);
-              action.play();
             });
-            console.log(`Started playing ${gltf.animations.length} animations for vastcuarto model`);
-          } else {
-            console.log("No animations found in vastcuarto model");
+            
+            // Add to scene with explicit visibility setting
+            vastModel.visible = true;
+            scene.add(vastModel);
+            
+            statusDisplay.innerText = "Status: vast.glb loaded successfully";
+            console.log("Vast model added to scene with visibility:", vastModel.visible);
+            
+            // Force a render to show the model
+            renderer.render(scene, camera);
+          }, 
+          // Progress callback
+          function(xhr) {
+            const percent = Math.floor(xhr.loaded / xhr.total * 100);
+            console.log('vast.glb loading: ' + percent + '%');
+            statusDisplay.innerText = `Status: Loading vast model: ${percent}%`;
+          },
+          // Error callback
+          function(error) {
+            console.error('Error loading vast.glb:', error);
+            statusDisplay.innerText = 'Status: Error loading vast model: ' + error.message;
           }
-          
-          // Apply same rendering settings as vast model
-          vastCuartoModel.traverse(function(node) {
-            if (node.isMesh) {
-              node.frustumCulled = false;
-              node.material.side = THREE.DoubleSide;
-              node.material.transparent = true;
-              node.material.opacity = 1.0;
-              node.material.depthTest = true;
-              node.material.needsUpdate = true;
-              node.visible = true;
-              node.renderOrder = 1000;
-              
-              if (node.material.map) {
-                node.material.map.needsUpdate = true;
-              }
-            }
-          });
-          
-          vastCuartoModel.visible = true;
-          scene.add(vastCuartoModel);
-          console.log("VastCuarto model added to scene with visibility:", vastCuartoModel.visible);
-          
-          renderer.render(scene, camera);
-        }, 
-        function(xhr) {
-          console.log('vastcuarto.glb loading: ' + (xhr.loaded / xhr.total * 100) + '%');
-        },
-        function(error) {
-          console.error('Error loading vastcuarto.glb:', error);
-        });
+        );
 
-        // Load the maskcuarto model with occlusion material
-        gltfLoader.load(maskCuartoPath, function(gltf) {
-          maskCuartoModel = gltf.scene;
-          // Scale and position
-          maskCuartoModel.scale.set(1, 1, 1);
-          maskCuartoModel.position.set(0, 0, 0);
-          
-          // Create and apply occlusion material
-          const occlusionMaterial = new THREE.MeshBasicMaterial({
-            colorWrite: false,  // Don't write color, only to depth buffer
-            depthWrite: true,   // Write to depth buffer
-            side: THREE.DoubleSide
+        // Comment out or conditionally load these models if files don't exist
+        // Only attempt to load vastcuarto if the path exists
+        if (false) { // Change to a check if file exists or just comment out this block
+          gltfLoader.load(vastCuartoPath, function(gltf) {
+            // ...existing code for vastCuartoModel...
           });
-          
-          // Apply occlusion material to all mesh children
-          maskCuartoModel.traverse(function(node) {
-            if (node.isMesh) {
-              node.material = occlusionMaterial;
-              node.renderOrder = 0; // Lower render order so it's processed before other objects
-              node.frustumCulled = false;
-            }
+        }
+
+        // Only attempt to load maskcuarto if the path exists
+        if (false) { // Change to a check if file exists or just comment out this block 
+          gltfLoader.load(maskCuartoPath, function(gltf) {
+            // ...existing code for maskCuartoModel...
           });
-          
-          scene.add(maskCuartoModel);
-          console.log("MaskCuarto model added to scene as occlusion mask");
-          
-          renderer.render(scene, camera);
-        }, 
-        function(xhr) {
-          console.log('maskcuarto.glb loading: ' + (xhr.loaded / xhr.total * 100) + '%');
-        },
-        function(error) {
-          console.error('Error loading maskcuarto.glb:', error);
-        });
+        }
       });
 
     const ambient = new THREE.AmbientLight(0x404040); // soft white light
@@ -572,24 +514,30 @@
     let t = clock.getElapsedTime();
     if (mixer) mixer.update(dt);
     if (vastMixer) vastMixer.update(dt);
-    if (vastCuartoMixer) vastCuartoMixer.update(dt);
     
-    // Ensure vast model remains visible
-    if (vastModel && !vastModel.visible) {
-      vastModel.visible = true;
-      vastModel.traverse(node => {
-        if (node.isMesh) node.visible = true;
-      });
-      console.log("Restored vast model visibility at time:", t);
+    // Check if vastModel exists and make sure it's visible
+    if (vastModel) {
+      if (!vastModel.visible) {
+        console.log("Restoring vast model visibility");
+        vastModel.visible = true;
+        vastModel.traverse(node => {
+          if (node.isMesh) node.visible = true;
+        });
+      }
+      
+      // Rotate the model to make it more visible (optional)
+      vastModel.rotation.y += dt * 0.5; // Gentle rotation around Y axis
     }
+    
+    // Only reference defined models
+    if (vastCuartoMixer) vastCuartoMixer.update(dt);
 
-    // Ensure vastcuarto model remains visible
-    if (vastCuartoModel && !vastCuartoModel.visible) {
+    // Only check vastCuartoModel if it's defined
+    if (typeof vastCuartoModel !== 'undefined' && vastCuartoModel && !vastCuartoModel.visible) {
       vastCuartoModel.visible = true;
       vastCuartoModel.traverse(node => {
         if (node.isMesh) node.visible = true;
       });
-      console.log("Restored vastcuarto model visibility at time:", t);
     }
 
     if (plyLoaded) {
