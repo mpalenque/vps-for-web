@@ -95,7 +95,7 @@
   let camera, scene, renderer, clock, pcgeo;
   let vastModel, vastMixer;
   let signVastModel, signVastMixer;
-  let vastMaskModel;l;
+  let vastMaskModel; // Fixed the syntax error: removed "l;"
   let immersal;
   let mapHandle = -1;
   let pointCloud = null;
@@ -527,8 +527,8 @@
 
         // Load vastmask with occlusion material - enable this by changing false to truets
         gltfLoader.load(vastMaskPath, 
-          // Success callback {
-          function(gltf) {..
+          // Success callback
+          function(gltf) { // Fixed syntax error: removed extra "."
             console.log("Successfully loaded vastmask.glb");
             vastMaskModel = gltf.scene;
             
@@ -572,7 +572,7 @@
           // Error callback
           function(error) {
             console.error('Error loading vastmask.glb:', error);
-            statusDisplay.innerText = 'Status: Error loading vastmask model: ' + error.message;is
+            statusDisplay.innerText = 'Status: Error loading vastmask model: ' + error.message;
           }
         );
       });
