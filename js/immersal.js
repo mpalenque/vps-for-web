@@ -73,9 +73,7 @@ class Immersal extends EventTarget {
     localizing: false,
     counter: 0,
     lastTime: 0,
-    lastGyro: new Quaternion(0, 0, 0, 1),
-    trackingStartTime: 0,  // Add tracking start time
-    trackingTimeLimit: 4000  // 4 seconds in milliseconds
+    lastGyro: new Quaternion(0, 0, 0, 1)
   };
 
   localizeInfo = {
@@ -286,9 +284,6 @@ class Immersal extends EventTarget {
   #resetLocalization() {
     this.cameraData.width = this.imageDownScale * this.camera.width;
     this.cameraData.height = this.imageDownScale * this.camera.height;
-    
-    // Reset tracking start time
-    this.localization.trackingStartTime = 0;
 
     if (this.deviceData) {
       let dw, dh, fx, fy, ox, oy;
@@ -653,21 +648,6 @@ class Immersal extends EventTarget {
 
   localizeDevice(time) {
     if (this.localization.localizing) {
-      return;
-    }
-
-    // Initialize tracking start time if it's zero
-    if (this.localization.trackingStartTime === 0) {
-      this.localization.trackingStartTime = time;
-      console.log(`[IMMERSAL] Tracking started, will run for 4 seconds`);
-    }
-
-    // Check if we've been tracking for more than 4 seconds
-    if (time - this.localization.trackingStartTime > this.localization.trackingTimeLimit) {
-      if (this.#continuousLocalization) {
-        console.log(`[IMMERSAL] Tracking time limit reached (${this.localization.trackingTimeLimit}ms), stopping continuous localization`);
-        this.continuousLocalization = false;
-      }
       return;
     }
 
