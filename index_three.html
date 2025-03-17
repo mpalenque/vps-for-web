@@ -97,6 +97,87 @@
     background-color: #0088cc;
     color: white;
   }
+  
+  /* Recording UI */
+  .recording-overlay {
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    display: none;
+    flex-direction: column;
+    align-items: center;
+    justify-content: flex-start;
+    z-index: 1500;
+    pointer-events: none;
+  }
+  
+  .recording-indicator {
+    margin-top: 20px;
+    padding: 5px 15px;
+    background-color: rgba(255, 0, 0, 0.7);
+    color: white;
+    border-radius: 20px;
+    font-weight: bold;
+    display: flex;
+    align-items: center;
+  }
+  
+  .recording-dot {
+    width: 12px;
+    height: 12px;
+    background-color: white;
+    border-radius: 50%;
+    margin-right: 8px;
+    animation: pulse 1s infinite;
+  }
+  
+  @keyframes pulse {
+    0% { opacity: 1; }
+    50% { opacity: 0.5; }
+    100% { opacity: 1; }
+  }
+  
+  .countdown-overlay {
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background-color: rgba(0, 0, 0, 0.3);
+    display: none;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    z-index: 1600;
+    pointer-events: none;
+  }
+  
+  .countdown-number {
+    font-size: 80px;
+    color: white;
+    font-weight: bold;
+    text-shadow: 0 0 10px rgba(0,0,0,0.5);
+    animation: zoom-in 1s ease-in-out;
+  }
+  
+  @keyframes zoom-in {
+    0% { transform: scale(0.5); opacity: 0; }
+    50% { transform: scale(1.2); opacity: 1; }
+    100% { transform: scale(1); opacity: 0.8; }
+  }
+  
+  /* Composite capture canvas - used for image/video compositing but hidden */
+  #captureCanvas {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    display: none;
+    z-index: -1;
+  }
 </style>
 </head>
 
@@ -180,6 +261,21 @@
   </button>
 </div>
 
+<!-- Recording UI elements -->
+<div id="recordingOverlay" class="recording-overlay">
+  <div class="recording-indicator">
+    <div class="recording-dot"></div>
+    <span id="recordingTimer">00:00</span>
+  </div>
+</div>
+
+<div id="countdownOverlay" class="countdown-overlay">
+  <div class="countdown-number" id="countdownNumber">3</div>
+</div>
+
+<!-- Canvas used for compositing camera feed and AR content -->
+<canvas id="captureCanvas"></canvas>
+
 <script type="module">
   import { immersalParams } from './js/imConfig.js';
   import { Immersal, createOrientationSensor } from './js/immersal.js';
@@ -214,6 +310,11 @@
   let recordedChunks = [];
   let isRecording = false;
   let isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent) && !window.MSStream;
+  let recordingStartTime = 0;
+  let recordingTimerInterval = null;
+  let captureCanvas = null;
+  let captureContext = null;
+  let cameraVideoElement = null;
 
   const init = async () => {
     const mapId = immersalParams.mapIds[0];
@@ -305,9 +406,85 @@
       // After initialization is complete and camera is running, display the camera controls
       document.getElementById('cameraControls').style.display = 'flex';
       
+      // Setup capture canvas for composite recording
+      setupCaptureCanvas();
+      
+      // Find the camera video element for compositing
+      setTimeout(findCameraElement, 500);
+      
     } catch (error) {
       console.error("Initialization error:", error);
       statusDisplay.innerText = "Status: Initialization error - " + error.message;
+    }
+  }
+
+  // Find the camera video element that Immersal created
+  function findCameraElement() {
+    // Immersal typically creates a video element for the camera feed
+    const videos = document.querySelectorAll('video');
+    videos.forEach(video => {
+      // Check if this is likely to be the camera feed video
+      if (video.srcObject && video.srcObject.getVideoTracks().length > 0) {
+        console.log("Found camera video element:", video);
+        cameraVideoElement = video;
+      }
+    });
+    
+    if (!cameraVideoElement && immersal && immersal.camera && immersal.camera.el) {
+      console.log("Using Immersal camera element");
+      cameraVideoElement = immersal.camera.el;
+    }
+    
+    if (!cameraVideoElement) {
+      console.warn("Could not find camera video element, will retry");
+      setTimeout(findCameraElement, 1000);
+    }
+  }
+  
+  // Setup canvas for composite capture
+  function setupCaptureCanvas() {
+    captureCanvas = document.getElementById('captureCanvas');
+    captureContext = captureCanvas.getContext('2d');
+    
+    // Set canvas size to match viewport
+    const resizeCanvas = () => {
+      captureCanvas.width = window.innerWidth;
+      captureCanvas.height = window.innerHeight;
+    };
+    
+    resizeCanvas();
+    window.addEventListener('resize', resizeCanvas);
+  }
+
+  // Create a composite frame with both camera feed and AR content
+  function captureCompositeFrame() {
+    if (!captureCanvas || !captureContext || !renderer || !cameraVideoElement) {
+      console.warn("Cannot create composite frame - missing elements");
+      return null;
+    }
+    
+    // Clear canvas
+    captureContext.clearRect(0, 0, captureCanvas.width, captureCanvas.height);
+    
+    try {
+      // First draw the camera feed
+      captureContext.drawImage(
+        cameraVideoElement, 
+        0, 0, 
+        captureCanvas.width, captureCanvas.height
+      );
+      
+      // Then overlay the WebGL renderer's content
+      captureContext.drawImage(
+        renderer.domElement, 
+        0, 0, 
+        captureCanvas.width, captureCanvas.height
+      );
+      
+      return captureCanvas;
+    } catch (err) {
+      console.error("Error creating composite frame:", err);
+      return null;
     }
   }
 
@@ -783,29 +960,40 @@
 
   // Photo and video recording functions
   function takePhoto() {
-    const canvas = renderer.domElement;
-    
     try {
-      // Create the image data URL
-      const imgDataUrl = canvas.toDataURL('image/png');
+      const compositeCanvas = captureCompositeFrame();
       
-      if (isIOS) {
-        // On iOS, show the image in a modal with save option
-        const photoPreview = document.getElementById('photoPreview');
-        photoPreview.src = imgDataUrl;
-        document.getElementById('photoModal').style.display = 'flex';
-        showFeedback('Use "Save to Photos" to add to your camera roll');
-      } else {
-        // For other devices, use download approach
-        const link = document.createElement('a');
-        link.download = 'vastronaut-ar-photo-' + new Date().toISOString().replace(/[:\.]/g, '-') + '.png';
-        link.href = imgDataUrl;
-        link.click();
-        showFeedback('Photo saved to downloads');
+      if (!compositeCanvas) {
+        // Fallback to just capturing the WebGL canvas if compositing fails
+        const imgDataUrl = renderer.domElement.toDataURL('image/png');
+        showCapturedImage(imgDataUrl);
+        return;
       }
+      
+      // Get data URL from the composite canvas
+      const imgDataUrl = compositeCanvas.toDataURL('image/png');
+      showCapturedImage(imgDataUrl);
+      
     } catch (err) {
       console.error('Error taking photo:', err);
       showFeedback('Error saving photo');
+    }
+  }
+  
+  function showCapturedImage(imgDataUrl) {
+    if (isIOS) {
+      // On iOS, show the image in a modal with save option
+      const photoPreview = document.getElementById('photoPreview');
+      photoPreview.src = imgDataUrl;
+      document.getElementById('photoModal').style.display = 'flex';
+      showFeedback('Use "Save to Photos" to add to your camera roll');
+    } else {
+      // For other devices, use download approach
+      const link = document.createElement('a');
+      link.download = 'vastronaut-ar-photo-' + new Date().toISOString().replace(/[:\.]/g, '-') + '.png';
+      link.href = imgDataUrl;
+      link.click();
+      showFeedback('Photo saved to downloads');
     }
   }
   
@@ -840,115 +1028,201 @@
     document.getElementById('photoModal').style.display = 'none';
   }
   
+  function startCountdown(callback) {
+    const countdownOverlay = document.getElementById('countdownOverlay');
+    const countdownNumber = document.getElementById('countdownNumber');
+    let count = 3;
+    
+    // Show overlay with initial count
+    countdownOverlay.style.display = 'flex';
+    countdownNumber.textContent = count;
+    
+    // Update countdown every second
+    const interval = setInterval(() => {
+      count--;
+      
+      if (count <= 0) {
+        // Countdown finished
+        clearInterval(interval);
+        countdownOverlay.style.display = 'none';
+        callback(); // Execute the callback (start recording)
+      } else {
+        // Update displayed number with animation
+        countdownNumber.style.animation = 'none';
+        setTimeout(() => {
+          countdownNumber.style.animation = 'zoom-in 1s ease-in-out';
+          countdownNumber.textContent = count;
+        }, 10);
+      }
+    }, 1000);
+  }
+  
+  function updateRecordingTimer() {
+    const elapsed = (Date.now() - recordingStartTime) / 1000;
+    const minutes = Math.floor(elapsed / 60).toString().padStart(2, '0');
+    const seconds = Math.floor(elapsed % 60).toString().padStart(2, '0');
+    document.getElementById('recordingTimer').textContent = `${minutes}:${seconds}`;
+  }
+  
   function toggleVideoRecording() {
     const videoButton = document.getElementById('videoButton');
+    const recordingOverlay = document.getElementById('recordingOverlay');
     
-    // Check if video recording is supported
-    if (isIOS) {
-      showFeedback('Video recording not supported on iOS. Take screenshots instead.');
+    // Don't allow starting a new recording if already recording
+    if (isRecording) {
+      stopRecording();
       return;
     }
     
-    // Check MediaRecorder support
-    if (!window.MediaRecorder) {
-      showFeedback('Video recording not supported in this browser');
-      return;
-    }
-    
-    const canvas = renderer.domElement;
-    
-    if (!isRecording) {
-      // Start recording
+    // Start countdown before recording
+    startCountdown(() => {
+      // This function is called after countdown completes
+      startRecording();
+    });
+  }
+  
+  function startRecording() {
+    // Create a composite recording using both camera and AR content
+    try {
+      const videoButton = document.getElementById('videoButton');
+      const recordingOverlay = document.getElementById('recordingOverlay');
       recordedChunks = [];
       
-      try {
-        const stream = canvas.captureStream(30); // 30 FPS
+      // Setup and show recording UI
+      recordingStartTime = Date.now();
+      updateRecordingTimer();
+      recordingTimerInterval = setInterval(updateRecordingTimer, 1000);
+      recordingOverlay.style.display = 'flex';
+      videoButton.classList.add('recording');
+      
+      // Create a stream from our composite canvas
+      const compositeStream = captureCanvas.captureStream(30); // 30 FPS
+      
+      // Get audio from user's microphone (optional)
+      navigator.mediaDevices.getUserMedia({ audio: true, video: false })
+      .then(audioStream => {
+        // Add audio tracks from microphone to the composite stream
+        audioStream.getAudioTracks().forEach(track => {
+          compositeStream.addTrack(track);
+        });
         
-        // Check for supported MIME types
-        let mimeType = 'video/webm';
-        if (MediaRecorder.isTypeSupported('video/webm;codecs=vp9')) {
-          mimeType = 'video/webm;codecs=vp9';
-        } else if (MediaRecorder.isTypeSupported('video/webm;codecs=vp8')) {
-          mimeType = 'video/webm;codecs=vp8';
-        } else if (MediaRecorder.isTypeSupported('video/webm')) {
-          mimeType = 'video/webm';
-        }
-        
-        mediaRecorder = new MediaRecorder(stream, { mimeType });
-        
-        mediaRecorder.ondataavailable = (event) => {
-          if (event.data.size > 0) {
-            recordedChunks.push(event.data);
-          }
-        };
-        
-        mediaRecorder.onstop = () => {
-          const blob = new Blob(recordedChunks, { type: mimeType });
-          const url = URL.createObjectURL(blob);
-          
-          // Create a link element to download the video
-          const link = document.createElement('a');
-          link.download = 'vastronaut-ar-video-' + new Date().toISOString().replace(/[:\.]/g, '-') + '.webm';
-          link.href = url;
-          
-          // Programmatically click the link to trigger download
-          link.click();
-          
-          // Clean up
-          URL.revokeObjectURL(url);
-          isRecording = false;
-          videoButton.classList.remove('recording');
-          
-          showFeedback('Video saved to downloads');
-        };
-        
-        // Start recording
-        mediaRecorder.start(100); // Collect data in chunks of 100ms
-        isRecording = true;
-        videoButton.classList.add('recording');
-        
-        showFeedback('Recording started');
-      } catch (err) {
-        console.error('Error starting video recording:', err);
-        showFeedback('Error starting recording: ' + err.message);
-      }
-    } else {
-      // Stop recording
-      if (mediaRecorder && isRecording) {
-        mediaRecorder.stop();
-      }
+        // Now start the recording with the combined stream
+        startMediaRecorder(compositeStream);
+      })
+      .catch(err => {
+        // If we can't get audio, just record without it
+        console.warn("Could not get audio stream for recording:", err);
+        startMediaRecorder(compositeStream);
+      });
+    } catch (err) {
+      console.error('Error starting recording:', err);
+      showFeedback('Error starting recording: ' + err.message);
     }
   }
   
-  function showFeedback(message) {
-    // Create or update feedback element
-    let feedback = document.getElementById('mediaFeedback');
-    
-    if (!feedback) {
-      feedback = document.createElement('div');
-      feedback.id = 'mediaFeedback';
-      feedback.style.position = 'fixed';
-      feedback.style.bottom = '90px';
-      feedback.style.left = '0';
-      feedback.style.right = '0';
-      feedback.style.textAlign = 'center';
-      feedback.style.color = 'white';
-      feedback.style.backgroundColor = 'rgba(0, 0, 0, 0.7)';
-      feedback.style.padding = '10px';
-      feedback.style.borderRadius = '5px';
-      feedback.style.margin = '0 auto';
-      feedback.style.maxWidth = '300px';
-      feedback.style.zIndex = '1001';
-      document.body.appendChild(feedback);
+  function startMediaRecorder(stream) {
+    // Determine supported MIME types
+    let mimeType = '';
+    if (MediaRecorder.isTypeSupported('video/mp4')) {
+      mimeType = 'video/mp4';
+    } else if (MediaRecorder.isTypeSupported('video/webm;codecs=h264')) {
+      mimeType = 'video/webm;codecs=h264';
+    } else if (MediaRecorder.isTypeSupported('video/webm;codecs=vp9')) {
+      mimeType = 'video/webm;codecs=vp9';
+    } else if (MediaRecorder.isTypeSupported('video/webm')) {
+      mimeType = 'video/webm';
     }
     
-    feedback.textContent = message;
-    feedback.style.display = 'block';
+    // For iOS, we may need to use a different approach
+    if (isIOS) {
+      // Using MediaRecorder with basic settings for iOS
+      mediaRecorder = new MediaRecorder(stream);
+    } else {
+      // Use determined MIME type for other platforms
+      const options = mimeType ? { mimeType } : {};
+      mediaRecorder = new MediaRecorder(stream, options);
+    }
     
-    // Hide after 3 seconds
-    setTimeout(() => {
-      feedback.style.display = 'none';
-    }, 3000);
+    mediaRecorder.ondataavailable = (event) => {
+      if (event.data && event.data.size > 0) {
+        recordedChunks.push(event.data);
+      }
+    };
+    
+    mediaRecorder.onstop = finishRecording;
+    
+    // Start actual recording
+    mediaRecorder.start(1000); // Collect data in chunks of 1 second
+    isRecording = true;
+    
+    // Setup animation loop to continuously update the composite canvas with new frames
+    setupCompositeRenderingLoop();
+  }
+  
+  function setupCompositeRenderingLoop() {
+    if (!isRecording) return;
+    
+    // Update the capture canvas with the latest composite frame
+    captureCompositeFrame();
+    
+    // Continue the loop while recording
+    requestAnimationFrame(setupCompositeRenderingLoop);
+  }
+  
+  function stopRecording() {
+    if (mediaRecorder && isRecording) {
+      mediaRecorder.stop();
+      clearInterval(recordingTimerInterval);
+      
+      // Hide recording UI
+      document.getElementById('recordingOverlay').style.display = 'none';
+      document.getElementById('videoButton').classList.remove('recording');
+      
+      isRecording = false;
+      showFeedback('Processing video...');
+    }
+  }
+  
+  function finishRecording() {
+    // Get the appropriate file extension based on mime type
+    let fileExt = '.webm';
+    let mimeType = 'video/webm';
+    
+    if (mediaRecorder.mimeType.includes('mp4')) {
+      fileExt = '.mp4';
+      mimeType = 'video/mp4';
+    }
+    
+    // Create blob from recorded chunks
+    const blob = new Blob(recordedChunks, { type: mimeType });
+    
+    // If on iOS, show share sheet
+    if (isIOS && navigator.share) {
+      const file = new File([blob], 'vastronaut-ar-video' + fileExt, { type: mimeType });
+      navigator.share({
+        title: 'VASTronaut AR Video',
+        files: [file]
+      }).then(() => {
+        showFeedback('Video ready to save');
+      }).catch(error => {
+        console.error('Error sharing video:', error);
+        // Fall back to download if sharing fails
+        downloadVideo(blob, fileExt);
+      });
+    } else {
+      // For other platforms, just download
+      downloadVideo(blob, fileExt);
+    }
+  }
+  
+  function downloadVideo(blob, fileExt) {
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.download = 'vastronaut-ar-video-' + new Date().toISOString().replace(/[:\.]/g, '-') + fileExt;
+    link.href = url;
+    link.click();
+    URL.revokeObjectURL(url);
+    showFeedback('Video saved to downloads');
   }
   
   document.addEventListener("DOMContentLoaded", (e) => {
