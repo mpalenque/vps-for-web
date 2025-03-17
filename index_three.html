@@ -20,6 +20,41 @@
   #uicontainer, #latlon, #locStatus {
     display: none !important;
   }
+  
+  /* Camera control buttons styling */
+  .camera-controls {
+    position: fixed;
+    bottom: 20px;
+    left: 0;
+    right: 0;
+    display: flex;
+    justify-content: center;
+    gap: 20px;
+    z-index: 1000;
+    display: none; /* Hidden by default, will be shown after camera initialization */
+  }
+  
+  .camera-button {
+    width: 60px;
+    height: 60px;
+    border-radius: 50%;
+    background-color: rgba(255, 255, 255, 0.8);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border: none;
+    cursor: pointer;
+    box-shadow: 0 2px 5px rgba(0, 0, 0, 0.3);
+  }
+  
+  .camera-button svg {
+    width: 30px;
+    height: 30px;
+  }
+  
+  .camera-button.recording {
+    background-color: rgba(255, 0, 0, 0.8);
+  }
 </style>
 </head>
 
@@ -78,6 +113,22 @@
     font-size: 0;
   ">Start AR</button>
 </div>
+
+<!-- Add camera control buttons -->
+<div id="cameraControls" class="camera-controls">
+  <button id="photoButton" class="camera-button" title="Take Photo">
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="black">
+      <circle cx="12" cy="12" r="3.2"/>
+      <path d="M9 2L7.17 4H4c-1.1 0-2 .9-2 2v12c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2V6c0-1.1-.9-2-2-2h-3.17L15 2H9zm3 15c-2.76 0-5-2.24-5-5s2.24-5 5-5 5 2.24 5 5-2.24 5-5 5z"/>
+    </svg>
+  </button>
+  <button id="videoButton" class="camera-button" title="Record Video">
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="black">
+      <path d="M17 10.5V7c0-.55-.45-1-1-1H4c-.55 0-1 .45-1 1v10c0 .55.45 1 1 1h12c.55 0 1-.45 1-1v-3.5l4 4v-11l-4 4z"/>
+    </svg>
+  </button>
+</div>
+
 <script type="module">
   import { immersalParams } from './js/imConfig.js';
   import { Immersal, createOrientationSensor } from './js/immersal.js';
@@ -108,6 +159,9 @@
   let plyLoaded = false;
   let contentLoaded = false;
   let prevTime = 0;
+  let mediaRecorder = null;
+  let recordedChunks = [];
+  let isRecording = false;
 
   const init = async () => {
     const mapId = immersalParams.mapIds[0];
@@ -195,6 +249,9 @@
             statusDisplay.innerText = "Status: Initial localization error";
           });
       }, 2000);
+      
+      // After initialization is complete and camera is running, display the camera controls
+      document.getElementById('cameraControls').style.display = 'flex';
       
     } catch (error) {
       console.error("Initialization error:", error);
@@ -672,6 +729,116 @@
       });
   }
 
+  // Photo and video recording functions
+  function takePhoto() {
+    const canvas = renderer.domElement;
+    
+    try {
+      // Create a link element to download the image
+      const link = document.createElement('a');
+      link.download = 'vastronaut-ar-photo-' + new Date().toISOString().replace(/[:\.]/g, '-') + '.png';
+      
+      // Convert canvas to data URL and set as link href
+      link.href = canvas.toDataURL('image/png');
+      
+      // Programmatically click the link to trigger download
+      link.click();
+      
+      // Show feedback
+      showFeedback('Photo saved to downloads');
+    } catch (err) {
+      console.error('Error taking photo:', err);
+      showFeedback('Error saving photo');
+    }
+  }
+  
+  function toggleVideoRecording() {
+    const canvas = renderer.domElement;
+    const videoButton = document.getElementById('videoButton');
+    
+    if (!isRecording) {
+      // Start recording
+      recordedChunks = [];
+      
+      try {
+        const stream = canvas.captureStream(30); // 30 FPS
+        mediaRecorder = new MediaRecorder(stream, { mimeType: 'video/webm;codecs=vp9' });
+        
+        mediaRecorder.ondataavailable = (event) => {
+          if (event.data.size > 0) {
+            recordedChunks.push(event.data);
+          }
+        };
+        
+        mediaRecorder.onstop = () => {
+          const blob = new Blob(recordedChunks, { type: 'video/webm' });
+          const url = URL.createObjectURL(blob);
+          
+          // Create a link element to download the video
+          const link = document.createElement('a');
+          link.download = 'vastronaut-ar-video-' + new Date().toISOString().replace(/[:\.]/g, '-') + '.webm';
+          link.href = url;
+          
+          // Programmatically click the link to trigger download
+          link.click();
+          
+          // Clean up
+          URL.revokeObjectURL(url);
+          isRecording = false;
+          videoButton.classList.remove('recording');
+          
+          showFeedback('Video saved to downloads');
+        };
+        
+        // Start recording
+        mediaRecorder.start(100); // Collect data in chunks of 100ms
+        isRecording = true;
+        videoButton.classList.add('recording');
+        
+        showFeedback('Recording started');
+      } catch (err) {
+        console.error('Error starting video recording:', err);
+        showFeedback('Error starting recording');
+      }
+    } else {
+      // Stop recording
+      if (mediaRecorder && isRecording) {
+        mediaRecorder.stop();
+      }
+    }
+  }
+  
+  function showFeedback(message) {
+    // Create or update feedback element
+    let feedback = document.getElementById('mediaFeedback');
+    
+    if (!feedback) {
+      feedback = document.createElement('div');
+      feedback.id = 'mediaFeedback';
+      feedback.style.position = 'fixed';
+      feedback.style.bottom = '90px';
+      feedback.style.left = '0';
+      feedback.style.right = '0';
+      feedback.style.textAlign = 'center';
+      feedback.style.color = 'white';
+      feedback.style.backgroundColor = 'rgba(0, 0, 0, 0.7)';
+      feedback.style.padding = '10px';
+      feedback.style.borderRadius = '5px';
+      feedback.style.margin = '0 auto';
+      feedback.style.maxWidth = '300px';
+      feedback.style.zIndex = '1001';
+      document.body.appendChild(feedback);
+    }
+    
+    feedback.textContent = message;
+    feedback.style.display = 'block';
+    
+    // Hide after 3 seconds
+    setTimeout(() => {
+      feedback.style.display = 'none';
+    }, 3000);
+  }
+  
   document.addEventListener("DOMContentLoaded", (e) => {
     let s = location.search.substring(1);
     let mapId = -1;
@@ -700,6 +867,10 @@
       immersalParams.developerToken = token;
       console.log("Using token from URL");
     }
+
+    // Add event listeners for the photo and video buttons
+    document.getElementById('photoButton').addEventListener('click', takePhoto);
+    document.getElementById('videoButton').addEventListener('click', toggleVideoRecording);
   });
 
   // UI functions
