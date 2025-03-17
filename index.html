@@ -35,18 +35,46 @@
             z-index: 1000;
             cursor: pointer;
         }
+        #locationModeButton {
+            position: fixed;
+            top: 20px;
+            left: 20px;
+            padding: 10px 15px;
+            background-color: #4CAF50;
+            color: white;
+            border: none;
+            border-radius: 5px;
+            font-size: 14px;
+            z-index: 1000;
+            cursor: pointer;
+        }
     </style>
 </head>
 <body>
     <video id="video" autoplay playsinline></video>
     <button id="permissionButton">Enable AR Experience</button>
+    <button id="locationModeButton">Activar Localización</button>
     <script type="module">
         import * as THREE from 'https://cdn.skypack.dev/three@0.138.0';
         import { OrbitControls } from 'https://cdn.skypack.dev/three@0.138.0/examples/jsm/controls/OrbitControls.js';
 
         // Global variables
         const permissionButton = document.getElementById('permissionButton');
+        const locationModeButton = document.getElementById('locationModeButton');
         const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent) && !window.MSStream;
+        
+        // Function to activate location mode
+        function activateLocationMode() {
+            console.log('Location mode activated');
+            // Here you would integrate with Imersla for location services
+            alert('Modo de localización activado');
+            
+            // Add your Imersla location integration code here
+            // This is where you would call the appropriate APIs to enable positioning
+        }
+        
+        // Add event listener to location mode button
+        locationModeButton.addEventListener('click', activateLocationMode);
         
         // Function to request motion permissions specifically
         async function requestMotionPermissions() {
