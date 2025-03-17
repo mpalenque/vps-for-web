@@ -95,7 +95,7 @@
   let camera, scene, renderer, clock, pcgeo;
   let vastModel, vastMixer;
   let signVastModel, signVastMixer;
-  let maskCuartoModel;
+  let vastMaskModel;
   let immersal;
   let mapHandle = -1;
   let pointCloud = null;
@@ -381,7 +381,7 @@
     let signVastPath = './assets/signvast.glb';
     
     // Define missing paths - remove references to them later if files don't exist
-    let maskCuartoPath = './assets/maskcuarto.glb'; // Added definition
+    let vastMaskPath = './assets/vastmask.glb'; // Changed from maskcuarto.glb
 
     new THREE.RGBELoader()
       .setPath('./assets/')
@@ -525,10 +525,10 @@
           }
         );
 
-        // Only attempt to load maskcuarto if the path exists
+        // Only attempt to load vastmask if the path exists
         if (false) { // Change to a check if file exists or just comment out this block 
-          gltfLoader.load(maskCuartoPath, function(gltf) {
-            // ...existing code for maskCuartoModel...
+          gltfLoader.load(vastMaskPath, function(gltf) {
+            // ...existing code for vastMaskModel...
           });
         }
       });
@@ -572,7 +572,7 @@
       }
       
       // Rotate the signVast model to make it more visible
-      signVastModel.rotation.y += dt * 0.5; // Gentle rotation around Y axis
+      signVastModel.rotation.y += dt * 0; // Gentle rotation around Y axis
     }
 
     if (plyLoaded) {
