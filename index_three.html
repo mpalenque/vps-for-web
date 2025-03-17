@@ -281,6 +281,11 @@
   import { Immersal, createOrientationSensor } from './js/immersal.js';
 
   const USE_FILTERING = true;
+  
+  // Add tracking state variables
+  let trackingFirstDetectedTime = 0;
+  let trackingFreezeDuration = 4000; // 4 seconds in milliseconds
+  let trackingHasBeenFrozen = false;
 
   const container = document.getElementById("container");
   const uiContainer = document.getElementById("uicontainer");
@@ -571,6 +576,27 @@
       if (immersal && immersal.localization && immersal.localization.counter > 1) {
         camera.fov = immersal.getVFov();
         camera.updateProjectionMatrix();
+
+        // Detect when tracking first starts (first successful localization)
+        if (trackingFirstDetectedTime === 0) {
+          trackingFirstDetectedTime = timestamp;
+          console.log("First successful tracking detected at:", timestamp);
+          showFeedback("Tracking detected");
+        }
+        
+        // Check if we should freeze tracking after 4 seconds
+        if (!trackingHasBeenFrozen && trackingFirstDetectedTime > 0 && 
+            (timestamp - trackingFirstDetectedTime) >= trackingFreezeDuration) {
+          immersal.continuousLocalization = false;
+          trackingHasBeenFrozen = true;
+          console.log("Tracking frozen after 4 seconds");
+          showFeedback("Tracking position frozen");
+          
+          // Update UI to reflect tracking is now disabled
+          if (document.getElementById('contloc')) {
+            document.getElementById('contloc').checked = false;
+          }
+        }
 
         // Debug print every 1 second
         if (Math.floor(timestamp / 1000) !== Math.floor(prevTime / 1000)) {
@@ -1284,6 +1310,39 @@
   window.show = show;
   window.hide = hide;
   window.toggleLoc = toggleLoc;
+
+  // Add feedback function to show temporary messages to the user
+  function showFeedback(message) {
+    // Create feedback element if it doesn't exist
+    let feedback = document.getElementById('feedbackMessage');
+    if (!feedback) {
+      feedback = document.createElement('div');
+      feedback.id = 'feedbackMessage';
+      feedback.style.cssText = `
+        position: fixed;
+        top: 20px;
+        left: 50%;
+        transform: translateX(-50%);
+        background-color: rgba(0, 0, 0, 0.7);
+        color: white;
+        padding: 8px 16px;
+        border-radius: 20px;
+        font-weight: bold;
+        z-index: 2000;
+        transition: opacity 0.5s;
+      `;
+      document.body.appendChild(feedback);
+    }
+    
+    // Show message
+    feedback.textContent = message;
+    feedback.style.opacity = 1;
+    
+    // Hide after 2 seconds
+    setTimeout(() => {
+      feedback.style.opacity = 0;
+    }, 2000);
+  }
 </script>
 </body>
 </html>

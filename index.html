@@ -35,7 +35,7 @@
             z-index: 1000;
             cursor: pointer;
         }
-        #locationModeButton {
+        #locationButton {
             position: fixed;
             top: 20px;
             left: 20px;
@@ -48,33 +48,118 @@
             z-index: 1000;
             cursor: pointer;
         }
+        #trackingStatus {
+            position: fixed;
+            top: 70px;
+            left: 20px;
+            color: white;
+            background-color: rgba(0,0,0,0.5);
+            padding: 5px 10px;
+            border-radius: 3px;
+            font-size: 14px;
+            z-index: 1000;
+        }
     </style>
 </head>
 <body>
     <video id="video" autoplay playsinline></video>
     <button id="permissionButton">Enable AR Experience</button>
-    <button id="locationModeButton">Activar Localización</button>
+    <button id="locationButton">Activar Localización</button>
+    <div id="trackingStatus" style="display: none;">Estado: Inactivo</div>
     <script type="module">
         import * as THREE from 'https://cdn.skypack.dev/three@0.138.0';
         import { OrbitControls } from 'https://cdn.skypack.dev/three@0.138.0/examples/jsm/controls/OrbitControls.js';
 
         // Global variables
         const permissionButton = document.getElementById('permissionButton');
-        const locationModeButton = document.getElementById('locationModeButton');
+        const locationButton = document.getElementById('locationButton');
+        const trackingStatus = document.getElementById('trackingStatus');
         const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent) && !window.MSStream;
+        let trackingActive = false;
+        let trackingTimer = null;
+        let scene, camera, contentGroup;
+        
+        // Immersal tracking variables
+        let lastTrackedPosition = null;
+        let lastTrackedRotation = null;
+        
+        // Hide location button initially - will show after permissions
+        locationButton.style.display = 'none';
         
         // Function to activate location mode
         function activateLocationMode() {
-            console.log('Location mode activated');
-            // Here you would integrate with Imersla for location services
-            alert('Modo de localización activado');
+            if (trackingActive) return;
             
-            // Add your Imersla location integration code here
-            // This is where you would call the appropriate APIs to enable positioning
+            trackingActive = true;
+            trackingStatus.style.display = 'block';
+            trackingStatus.innerText = 'Estado: Rastreando...';
+            locationButton.disabled = true;
+            
+            // Start immersal tracking (placeholder - replace with actual implementation)
+            startImmersalTracking();
+            
+            // Set timer to disable tracking after 4 seconds
+            trackingTimer = setTimeout(() => {
+                disableTracking();
+            }, 4000);
         }
         
-        // Add event listener to location mode button
-        locationModeButton.addEventListener('click', activateLocationMode);
+        // Function to start Immersal tracking
+        function startImmersalTracking() {
+            console.log('Starting Immersal tracking');
+            
+            // This is a placeholder for the actual Immersal SDK initialization
+            // You would replace this with actual Immersal SDK code
+            
+            // Simulate tracking updates with an interval (replace with actual tracking events)
+            const trackingInterval = setInterval(() => {
+                if (!trackingActive) {
+                    clearInterval(trackingInterval);
+                    return;
+                }
+                
+                // Simulate getting a new position from Immersal (replace with actual implementation)
+                updateTrackedPosition();
+            }, 100);
+        }
+        
+        // Update the position based on tracking data
+        function updateTrackedPosition() {
+            // This is a placeholder - replace with actual position from Immersal
+            // Generating random slight movements to simulate tracking
+            if (!lastTrackedPosition) {
+                // Initial position
+                lastTrackedPosition = new THREE.Vector3(1, 0, 0);
+                lastTrackedRotation = new THREE.Euler(0, 0, 0);
+            } else {
+                // Small random adjustment to simulate tracking updates
+                lastTrackedPosition.x += (Math.random() - 0.5) * 0.01;
+                lastTrackedPosition.y += (Math.random() - 0.5) * 0.01;
+                lastTrackedPosition.z += (Math.random() - 0.5) * 0.01;
+                
+                lastTrackedRotation.x += (Math.random() - 0.5) * 0.005;
+                lastTrackedRotation.y += (Math.random() - 0.5) * 0.005;
+                lastTrackedRotation.z += (Math.random() - 0.5) * 0.005;
+            }
+            
+            // Update the 3D content position and rotation
+            if (contentGroup) {
+                contentGroup.position.copy(lastTrackedPosition);
+                contentGroup.rotation.copy(lastTrackedRotation);
+            }
+        }
+        
+        // Function to disable tracking
+        function disableTracking() {
+            trackingActive = false;
+            trackingStatus.innerText = 'Estado: Fijado en última posición';
+            locationButton.disabled = false;
+            
+            console.log('Immersal tracking disabled. Fixed at last position:', 
+                        lastTrackedPosition, lastTrackedRotation);
+            
+            // Here you would disable the actual Immersal tracking SDK
+        }
         
         // Function to request motion permissions specifically
         async function requestMotionPermissions() {
@@ -139,8 +224,9 @@
                     await requestMotionPermissions();
                 }
                 
-                // Hide permission button
+                // Hide permission button and show location button
                 permissionButton.style.display = 'none';
+                locationButton.style.display = 'block';
                 
                 // Initialize experience after permissions
                 initializeExperience();
@@ -150,13 +236,14 @@
             }
         }
 
-        // Add event listener to button
+        // Add event listeners to buttons
         permissionButton.addEventListener('click', requestPermissions);
+        locationButton.addEventListener('click', activateLocationMode);
 
         function initializeExperience() {
             // Initialize scene, camera and renderer
-            const scene = new THREE.Scene();
-            const camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
+            scene = new THREE.Scene();
+            camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
             const renderer = new THREE.WebGLRenderer({ 
                 alpha: true,
                 antialias: true
@@ -176,12 +263,16 @@
             directionalLight.position.set(1, 1, 1);
             scene.add(directionalLight);
 
+            // Create a group to hold all content that will be positioned by Immersal
+            contentGroup = new THREE.Group();
+            scene.add(contentGroup);
+
             // Create the red sphere
             const sphereGeometry = new THREE.SphereGeometry(1.5, 32, 32);
             const sphereMaterial = new THREE.MeshStandardMaterial({ color: 0xff0000 });
             const sphere = new THREE.Mesh(sphereGeometry, sphereMaterial);
-            sphere.position.x = 1;
-            scene.add(sphere);
+            sphere.position.x = 0;
+            contentGroup.add(sphere);
 
             // Create occluding cube
             const cubeGeometry = new THREE.BoxGeometry(2, 2, 2);
@@ -191,8 +282,11 @@
             });
             const cube = new THREE.Mesh(cubeGeometry, cubeMaterial);
             cube.position.y = -0.75; // Position the cube at the lower half of the sphere
-            cube.position.x = 1;     // Match the sphere's x position
-            scene.add(cube);
+            cube.position.x = 0;     // Match the sphere's x position
+            contentGroup.add(cube);
+            
+            // Position the whole content group at a default position
+            contentGroup.position.set(1, 0, 0);
 
             // Add orbit controls
             const controls = new OrbitControls(camera, renderer.domElement);
@@ -210,7 +304,7 @@
             function animate() {
                 requestAnimationFrame(animate);
                 
-                // Rotate objects slightly
+                // Rotate objects slightly - now inside the content group
                 sphere.rotation.x += 0.005;
                 sphere.rotation.y += 0.007;
                 cube.rotation.x += 0.002;
