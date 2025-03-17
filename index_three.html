@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta http-equiv="X-UA-Compatible" content="IE=edge">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>THREE + Immersal VPS for Web</title>
+<title>VASTRONAUT GTC</title>
 <link rel="stylesheet" href="css/styles.css">
 <meta id="theme-color" name="theme-color" content="#37474F">
 <meta name="apple-mobile-web-app-capable" content="yes">
@@ -94,6 +94,7 @@
   
   let camera, scene, renderer, clock, pcgeo;
   let vastModel, vastMixer;
+  let signVastModel, signVastMixer;
   let maskCuartoModel;
   let immersal;
   let mapHandle = -1;
@@ -377,6 +378,7 @@
 
   function loadContent() {
     let vastPath = './assets/vast.glb';
+    let signVastPath = './assets/signvast.glb';
     
     // Define missing paths - remove references to them later if files don't exist
     let maskCuartoPath = './assets/maskcuarto.glb'; // Added definition
@@ -408,7 +410,7 @@
             
             // Scale and position the vast model
             vastModel.scale.set(1, 1, 1);
-            vastModel.position.set(0, 0, 0); // Position it 2 units in front of camera
+            vastModel.position.set(0, 0, 0); // Position it at origin
             
             // Setup animation for vast model
             if (gltf.animations && gltf.animations.length > 0) {
@@ -460,6 +462,69 @@
           }
         );
 
+        // Load the signvast.glb model
+        console.log("Starting to load signvast model from:", signVastPath);
+        statusDisplay.innerText = "Status: Loading signvast.glb...";
+        
+        gltfLoader.load(signVastPath, 
+          // Success callback
+          function(gltf) {
+            console.log("Successfully loaded signvast.glb");
+            signVastModel = gltf.scene;
+            
+            // Scale and position the signvast model
+            signVastModel.scale.set(1, 1, 1);
+            signVastModel.position.set(0, 0, -2); // Position it 2 units in front
+            
+            // Setup animation for signvast model if it has animations
+            if (gltf.animations && gltf.animations.length > 0) {
+              signVastMixer = new THREE.AnimationMixer(gltf.scene);
+              gltf.animations.forEach((clip, index) => {
+                const action = signVastMixer.clipAction(clip);
+                action.play();
+                console.log(`Started animation ${index}: ${clip.name}`);
+              });
+              console.log(`Started playing ${gltf.animations.length} animations for signvast model`);
+            } else {
+              console.log("No animations found in signvast model");
+            }
+            
+            // Ensure all meshes in the model have proper rendering settings
+            signVastModel.traverse(function(node) {
+              if (node.isMesh) {
+                node.frustumCulled = false; // Prevent disappearing due to frustum culling
+                node.material.side = THREE.DoubleSide; // Render both sides
+                node.material.transparent = true;
+                node.material.opacity = 1.0;
+                node.material.depthTest = true;
+                node.material.needsUpdate = true;
+                node.visible = true;
+                console.log("Processed mesh in signvast model:", node.name);
+              }
+            });
+            
+            // Add to scene with explicit visibility setting
+            signVastModel.visible = true;
+            scene.add(signVastModel);
+            
+            statusDisplay.innerText = "Status: signvast.glb loaded successfully";
+            console.log("signVast model added to scene with visibility:", signVastModel.visible);
+            
+            // Force a render to show the model
+            renderer.render(scene, camera);
+          }, 
+          // Progress callback
+          function(xhr) {
+            const percent = Math.floor(xhr.loaded / xhr.total * 100);
+            console.log('signvast.glb loading: ' + percent + '%');
+          },
+          // Error callback
+          function(error) {
+            console.error('Error loading signvast.glb:', error);
+            statusDisplay.innerText = 'Status: Error loading signvast model: ' + error.message;
+          }
+        );
+
         // Only attempt to load maskcuarto if the path exists
         if (false) { // Change to a check if file exists or just comment out this block 
           gltfLoader.load(maskCuartoPath, function(gltf) {
@@ -480,6 +545,7 @@
     let dt = clock.getDelta();
     let t = clock.getElapsedTime();
     if (vastMixer) vastMixer.update(dt);
+    if (signVastMixer) signVastMixer.update(dt);
     
     // Check if vastModel exists and make sure it's visible
     if (vastModel) {
@@ -493,6 +559,20 @@
       
       // Rotate the model to make it more visible (optional)
       vastModel.rotation.y += dt * 0.0; // Gentle rotation around Y axis
+    }
+
+    // Check if signVastModel exists and make sure it's visible
+    if (signVastModel) {
+      if (!signVastModel.visible) {
+        console.log("Restoring signVast model visibility");
+        signVastModel.visible = true;
+        signVastModel.traverse(node => {
+          if (node.isMesh) node.visible = true;
+        });
+      }
+      
+      // Rotate the signVast model to make it more visible
+      signVastModel.rotation.y += dt * 0.5; // Gentle rotation around Y axis
     }
 
     if (plyLoaded) {
