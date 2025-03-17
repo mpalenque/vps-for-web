@@ -526,187 +526,89 @@
         );
 
         // Only attempt to load vastmask if the path exists
-        if (true) { // Changed from false to true to enable loading
-          gltfLoader.load(vastMaskPath, function(gltf) {ask.glb...";
-            console.log("Successfully loaded vastmask.glb");
-            vastMaskModel = gltf.scene;oader.load(vastMaskPath, 
-             // Success callback
-            // Scale and position the vastmask model function(gltf) {
-            vastMaskModel.scale.set(1, 1, 1);            console.log("Successfully loaded vastmask.glb");
-            vastMaskModel.position.set(0, 0, 0); // Position it at origin
-            
-            // Apply occlusion material to all meshes            // Scale and position the vastmask model
-            vastMaskModel.traverse(function(node) {
-              if (node.isMesh) {0, 0, 0); // Position it at origin
-                // Create occlusion material
-                const occlusionMaterial = new THREE.MeshBasicMaterial({         // Apply occlusion material to all meshes
-                  colorWrite: false,      // Don't write color - invisible            vastMaskModel.traverse(function(node) {
-                  depthWrite: true,       // Do write to depth bufferh) {
-                  side: THREE.DoubleSide, // Render both sidesusion material
-                  transparent: false,     // Not transparentrial = new THREE.MeshBasicMaterial({
-                });  // Don't write color - invisible
-                write to depth buffer
-                // Apply occlusion material              side: THREE.DoubleSide, // Render both sides
-                node.material = occlusionMaterial;t
-                node.renderOrder = -1;    // Render before other objects
-                node.frustumCulled = false;
-                node.visible = true;
-                cclusionMaterial;
-                console.log("Applied occlusion material to mesh in vastmask model:", node.name);1;    // Render before other objects
-              }
-            });     node.visible = true;
-                     
-            // Add to scene          console.log("Applied occlusion material to mesh in vastmask model:", node.name);
-            vastMaskModel.visible = true;
-            scene.add(vastMaskModel);
-                   
-            statusDisplay.innerText = "Status: vastmask.glb loaded with occlusion material";            // Add to scene
-            console.log("vastMask model added to scene with occlusion material");
-            stMaskModel);
-            // Force a render to update the depth buffer
-            renderer.render(scene, camera); loaded with occlusion material";
-          });el added to scene with occlusion material");
+        if (false) { // Change to a check if file exists or just comment out this block 
+          gltfLoader.load(vastMaskPath, function(gltf) {
+            // ...existing code for vastMaskModel...
+          });
         }
-th buffer
-      }); renderer.render(scene, camera);
-   }, 
-    const ambient = new THREE.AmbientLight(0x404040); // soft white light    // Progress callback
+      });
+
+    const ambient = new THREE.AmbientLight(0x404040); // soft white light
     scene.add(ambient);
 
-    let directional = new THREE.DirectionalLight(0x101820, 0.5);       console.log('vastmask.glb loading: ' + percent + '%');
-    directional.position.set(-1, 1, 0);          },
-    scene.add(directional);MaskModel exists and make sure it's visibleallback
+    let directional = new THREE.DirectionalLight(0x101820, 0.5);
+    directional.position.set(-1, 1, 0);
+    scene.add(directional);
   }
-      if (!vastMaskModel.visible) {            console.error('Error loading vastmask.glb:', error);
-  function updateContent() {sk model: ' + error.message;
+
+  function updateContent() {
     let dt = clock.getDelta();
-    let t = clock.getElapsedTime(); vastMaskModel.traverse(node => { );
-    if (vastMixer) vastMixer.update(dt);      if (node.isMesh) node.visible = true;  });
+    let t = clock.getElapsedTime();
+    if (vastMixer) vastMixer.update(dt);
     if (signVastMixer) signVastMixer.update(dt);
-    st ambient = new THREE.AmbientLight(0x404040); // soft white light
-    // Check if vastModel exists and make sure it's visible } scene.add(ambient);
+    
+    // Check if vastModel exists and make sure it's visible
     if (vastModel) {
       if (!vastModel.visible) {
-        console.log("Restoring vast model visibility");eo.attributes;(-1, 1, 0);
+        console.log("Restoring vast model visibility");
         vastModel.visible = true;
         vastModel.traverse(node => {
-          if (node.isMesh) node.visible = true;    attributes.size.array[i] = 14 + 13 * Math.sin(0.1 * i + (t*2));
+          if (node.isMesh) node.visible = true;
         });
       }
-      .needsUpdate = true;ElapsedTime();
+      
       // Rotate the model to make it more visible (optional)
       vastModel.rotation.y += dt * 0.0; // Gentle rotation around Y axis
     }
-ion to check the map validityvastModel exists and make sure it's visible
+
     // Check if signVastModel exists and make sure it's visible
-    if (signVastModel) {le.log(`Checking map: [${mapId}]`);(!vastModel.visible) {
-      if (!signVastModel.visible) {t checkUrl = Immersal.BASE_URL + '/map/get' + '?token=' + immersalParams.developerToken + '&id=' + mapId;console.log("Restoring vast model visibility");
+    if (signVastModel) {
+      if (!signVastModel.visible) {
         console.log("Restoring signVast model visibility");
         signVastModel.visible = true;
         signVastModel.traverse(node => {
-          if (node.isMesh) node.visible = true;en(data => {);
-        });     console.log("Map check result:", data);   }
-      }        if (data && data.error === "none") {      
-      d - ${data.name || mapId}`;nal)
-      // Rotate the signVast model to make it more visibleY axis
-      signVastModel.rotation.y += dt * 0; // Gentle rotation around Y axisplay.innerText = `Status: Map error - ${data.error || "unknown"}`;
-    }
-      })    // Check if signVastModel exists and make sure it's visible
-    if (plyLoaded) {{
-      const attributes = pcgeo.attributes;or);
-nerText = "Status: Map check error";toring signVast model visibility");
-      for (let i = 0; i < attributes.size.array.length; i ++) {.visible = true;
-        attributes.size.array[i] = 14 + 13 * Math.sin(0.1 * i + (t*2));
-      }e.visible = true;
-    OMContentLoaded", (e) => {
-      attributes.size.needsUpdate = true; = location.search.substring(1);
-    }  apId = -1;
-  }et token = null; // Rotate the signVast model to make it more visible
+          if (node.isMesh) node.visible = true;
+        });
+      }
+      
+      // Rotate the signVast model to make it more visible
       signVastModel.rotation.y += dt * 0; // Gentle rotation around Y axis
+    }
+
+    if (plyLoaded) {
+      const attributes = pcgeo.attributes;
+
+      for (let i = 0; i < attributes.size.array.length; i ++) {
+        attributes.size.array[i] = 14 + 13 * Math.sin(0.1 * i + (t*2));
+      }
+    
+      attributes.size.needsUpdate = true;
+    }  
+  }
+
   // Add a function to check the map validity
-  function checkMap(mapId) {) => {
+  function checkMap(mapId) {
     console.log(`Checking map: [${mapId}]`);
     const checkUrl = Immersal.BASE_URL + '/map/get' + '?token=' + immersalParams.developerToken + '&id=' + mapId;
     
-    fetch(checkUrl)ributes.size.array.length; i ++) {
-          token = item; break; .then(response => response.json())   attributes.size.array[i] = 14 + 13 * Math.sin(0.1 * i + (t*2));
-        }      .then(data => {      }
-      });check result:", data);
-    }
-s: Map verified - ${data.name || mapId}`;
-    if (mapId !== -1) {   } else {
-      immersalParams.mapIds[0] = mapId;     statusDisplay.innerText = `Status: Map error - ${data.error || "unknown"}`;
-      console.log("Using map ID from URL:", mapId);        }  // Add a function to check the map validity
-      statusDisplay.innerText = `Status: Using map ID: ${mapId}`; {
-      // Check if the map exists and is valid      .catch(error => {    console.log(`Checking map: [${mapId}]`);
-      checkMap(mapId); check error:", error);sal.BASE_URL + '/map/get' + '?token=' + immersalParams.developerToken + '&id=' + mapId;
-    }
-   }); fetch(checkUrl)
-    if (token !== null) {  }      .then(response => response.json())
-      immersalParams.developerToken = token;
-      console.log("Using token from URL");
-    } let s = location.search.substring(1);     if (data && data.error === "none") {
-  });    let mapId = -1;          statusDisplay.innerText = `Status: Map verified - ${data.name || mapId}`;
+    fetch(checkUrl)
+      .then(response => response.json())
+      .then(data => {
+        console.log("Map check result:", data);
+        if (data && data.error === "none") {
+          statusDisplay.innerText = `Status: Map verified - ${data.name || mapId}`;
+        } else {
+          statusDisplay.innerText = `Status: Map error - ${data.error || "unknown"}`;
+        }
+      })
+      .catch(error => {
+        console.error("Map check error:", error);
+        statusDisplay.innerText = "Status: Map check error";
+      });
+  }
 
-  // UI functions
-
-  function show(el, box) {   s.split('&').forEach((item, index) => {   })
-    document.getElementById(el).style.display = (box.checked) ? "block" : "none";        switch (index) {      .catch(error => {
-  }check error:", error);
-seInt(item); break;.innerText = "Status: Map check error";
-  function hide(el, box) {
-    document.getElementById(el).style.display = (box.checked) ? "none" : "none"; token = item; break;
-  } }
-);ent.addEventListener("DOMContentLoaded", (e) => {
-
-
-
-
-
-
-
-
-
-
-
-</html></body></script>  window.toggleLoc = toggleLoc;  window.hide = hide;  window.show = show;  }    locButton.style.display = (box.checked) ? "none" : "block";    immersal.continuousLocalization = box.checked;  function toggleLoc(box) {
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-</html></body></script>  window.toggleLoc = toggleLoc;  window.hide = hide;  window.show = show;  }    locButton.style.display = (box.checked) ? "none" : "block";    immersal.continuousLocalization = box.checked;  function toggleLoc(box) {  }    document.getElementById(el).style.display = (box.checked) ? "none" : "none";  function hide(el, box) {  }    document.getElementById(el).style.display = (box.checked) ? "block" : "none";  function show(el, box) {  // UI functions  });    }      console.log("Using token from URL");      immersalParams.developerToken = token;    if (token !== null) {    }      checkMap(mapId);      // Check if the map exists and is valid      statusDisplay.innerText = `Status: Using map ID: ${mapId}`;      console.log("Using map ID from URL:", mapId);      immersalParams.mapIds[0] = mapId;    if (mapId !== -1) {    }    let s = location.search.substring(1);
+  document.addEventListener("DOMContentLoaded", (e) => {
+    let s = location.search.substring(1);
     let mapId = -1;
     let token = null;
 
