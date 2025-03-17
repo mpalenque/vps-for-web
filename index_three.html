@@ -286,24 +286,6 @@
   let trackingFirstDetectedTime = 0;
   let trackingFreezeDuration = 4000; // 4 seconds in milliseconds
   let trackingHasBeenFrozen = false;
-  
-  // Add stability tracking variables
-  let positionBuffer = [];
-  let rotationBuffer = [];
-  const BUFFER_SIZE = 10; // Keep last 10 positions/rotations for smoothing
-  let lastValidPosition = new THREE.Vector3();
-  let lastValidQuaternion = new THREE.Quaternion();
-  let positionChangeThreshold = 0.5; // Max distance change allowed between frames
-  let stabilityCounter = 0; // Counter to determine stability
-  let trackingLost = false;
-  let recoveryAttemptTime = 0;
-  
-  // Improved filtering parameters
-  const POSITION_SMOOTH_FACTOR = 0.1; // Slower position updates (was 0.025)
-  const ROTATION_SMOOTH_FACTOR = 0.15; // Slower rotation updates
-  
-  // Track position stability
-  let positionStability = 0; // 0-100, higher means more stable
 
   const container = document.getElementById("container");
   const uiContainer = document.getElementById("uicontainer");
@@ -602,14 +584,13 @@
           showFeedback("Tracking detected");
         }
         
-        // Check if we should freeze tracking after getting stable position
+        // Check if we should freeze tracking after 4 seconds
         if (!trackingHasBeenFrozen && trackingFirstDetectedTime > 0 && 
-            (timestamp - trackingFirstDetectedTime) >= trackingFreezeDuration &&
-            positionStability > 70) { // Only freeze if position is stable
+            (timestamp - trackingFirstDetectedTime) >= trackingFreezeDuration) {
           immersal.continuousLocalization = false;
           trackingHasBeenFrozen = true;
-          console.log("Tracking frozen after getting stable position");
-          showFeedback("Tracking position locked");
+          console.log("Tracking frozen after 4 seconds");
+          showFeedback("Tracking position frozen");
           
           // Update UI to reflect tracking is now disabled
           if (document.getElementById('contloc')) {
@@ -621,7 +602,6 @@
         if (Math.floor(timestamp / 1000) !== Math.floor(prevTime / 1000)) {
           console.log("Localization count:", immersal.localization.counter);
           console.log("Camera position:", camera.position);
-          console.log("Position stability:", positionStability.toFixed(1) + "%");
         }
         
         const {position, rotation, elapsedTime, wgs84} = immersal.localizeInfo;
@@ -631,154 +611,35 @@
             const pose = immersal.getEstimatedPose(timestamp);
             
             if (pose && pose.position && pose.rotation) {
-              // Extract position and rotation from the pose
-              const newPosition = new THREE.Vector3(
-                pose.position[0], 
-                pose.position[1], 
-                pose.position[2]
-              );
+              P.set(pose.position[0], pose.position[1], pose.position[2]);
+              Q.set(pose.rotation[0], pose.rotation[1], pose.rotation[2], pose.rotation[3]);
               
-              let newQuaternion = new THREE.Quaternion(
-                pose.rotation[0], 
-                pose.rotation[1], 
-                pose.rotation[2], 
-                pose.rotation[3]
-              );
-              
-              // Apply gyro data
               if (immersal.gyroData) {
                 QG.set(immersal.gyroData.x, immersal.gyroData.y, immersal.gyroData.z, immersal.gyroData.w);
-                newQuaternion.multiply(QG);
+                Q.multiply(QG);
               }
 
-              // Check for sudden position jumps
-              if (lastValidPosition.length() > 0) {
-                const distance = newPosition.distanceTo(lastValidPosition);
-                
-                // If the distance is too large, it might be a tracking error
-                if (distance > positionChangeThreshold) {
-                  // Don't immediately discard - accumulate stability data
-                  stabilityCounter--;
-                  stabilityCounter = Math.max(0, stabilityCounter);
-                  
-                  // If we've had multiple unstable frames, consider tracking lost
-                  if (stabilityCounter <= 0 && !trackingLost) {
-                    console.warn("Tracking appears unstable, using last known good position");
-                    trackingLost = true;
-                    recoveryAttemptTime = timestamp + 1000; // Try to recover in 1 second
-                    showFeedback("Stabilizing tracking...");
-                    
-                    // Keep using our last good position instead of the jump
-                    newPosition.copy(lastValidPosition);
-                  }
-                } else {
-                  // Position looks good, increase stability
-                  stabilityCounter = Math.min(10, stabilityCounter + 1);
-                  
-                  // If we've had enough stable frames, tracking is recovered
-                  if (trackingLost && stabilityCounter > 5) {
-                    trackingLost = false;
-                    showFeedback("Tracking stable again");
-                  }
-                }
-              }
-
-              // Add to our position/rotation buffers for smoothing
-              positionBuffer.push(newPosition);
-              rotationBuffer.push(newQuaternion);
-              
-              // Keep the buffers at fixed size
-              while (positionBuffer.length > BUFFER_SIZE) positionBuffer.shift();
-              while (rotationBuffer.length > BUFFER_SIZE) rotationBuffer.shift();
-              
-              // Calculate smoothed position and rotation from buffers
-              let smoothedPosition = new THREE.Vector3();
-              let totalWeight = 0;
-              
-              // Apply weighted average to positions (newer positions have higher weight)
-              positionBuffer.forEach((pos, index) => {
-                const weight = (index + 1) / positionBuffer.length;
-                smoothedPosition.add(pos.clone().multiplyScalar(weight));
-                totalWeight += weight;
-              });
-              
-              if (totalWeight > 0) {
-                smoothedPosition.divideScalar(totalWeight);
-              }
-              
-              // Save the position for detecting jumps in the next frame
-              if (!trackingLost) {
-                lastValidPosition.copy(smoothedPosition);
-              }
-              
-              // Calculate position stability percentage
-              if (positionBuffer.length > 1) {
-                let totalVariation = 0;
-                for (let i = 1; i < positionBuffer.length; i++) {
-                  totalVariation += positionBuffer[i].distanceTo(positionBuffer[i-1]);
-                }
-                const avgVariation = totalVariation / (positionBuffer.length - 1);
-                positionStability = Math.max(0, 100 - (avgVariation * 100));
-              }
-              
-              // Also smooth the rotation
-              let smoothedQuaternion = new THREE.Quaternion();
-              THREE.Quaternion.slerp(
-                camera.quaternion, 
-                newQuaternion, 
-                smoothedQuaternion, 
-                ROTATION_SMOOTH_FACTOR * dt
-              );
-              
-              lastValidQuaternion.copy(smoothedQuaternion);
-              
               if (USE_FILTERING) {
-                // Apply smoother lerp/slerp with delta-time adjustment
-                let positionStep = POSITION_SMOOTH_FACTOR * dt;
-                positionStep = Math.min(positionStep, 1.0);
-                
-                camera.position.lerp(smoothedPosition, positionStep);
-                camera.quaternion.slerp(smoothedQuaternion, ROTATION_SMOOTH_FACTOR * dt);
+                let step = 0.025 * dt;
+                if (step > 1.0) step = 1.0;
+
+                camera.position.lerp(P, step);
+                camera.quaternion.slerp(Q, step);
               } else {
-                camera.position.copy(smoothedPosition);
-                camera.quaternion.copy(smoothedQuaternion);
+                camera.position.set(P.x, P.y, P.z);
+                camera.quaternion.set(Q.x, Q.y, Q.z, Q.w);
               }
             } else {
               console.warn("Invalid pose data:", pose);
             }
-            
-            // Check if we need to attempt recovery
-            if (trackingLost && timestamp >= recoveryAttemptTime) {
-              console.log("Attempting to recover tracking...");
-              
-              // Try to re-localize
-              immersal.localizeDeviceAsync()
-                .then(result => {
-                  if (result && result.success) {
-                    console.log("Successfully recovered tracking");
-                    showFeedback("Tracking recovered");
-                    trackingLost = false;
-                    stabilityCounter = 5; // Set to middle stability value
-                  }
-                });
-              
-              // Set next recovery attempt
-              recoveryAttemptTime = timestamp + 3000; // Try every 3 seconds
-            }
-            
           } catch (err) {
             console.error("Error in pose estimation:", err);
           }
         } else {
-          // When tracking is frozen (not in continuous localization mode)
           P.set(position.x, position.y, position.z);
-          Q.set(rotation.x, position.y, rotation.z, rotation.w);
-          
-          if (immersal.gyroData) {
-            QG.set(immersal.gyroData.x, immersal.gyroData.y, immersal.gyroData.z, immersal.gyroData.w);
-            Q.multiply(QG);
-          }
-          
+          Q.set(rotation.x, rotation.y, rotation.z, rotation.w);
+          QG.set(immersal.gyroData.x, immersal.gyroData.y, immersal.gyroData.z, immersal.gyroData.w);
+          Q.multiply(QG);
           camera.position.set(P.x, P.y, P.z);
           camera.quaternion.set(Q.x, Q.y, Q.z, Q.w);
         }
@@ -1444,18 +1305,6 @@
   function toggleLoc(box) {
     immersal.continuousLocalization = box.checked;
     locButton.style.display = (box.checked) ? "none" : "block";
-    
-    // Reset tracking variables when re-enabling continuous localization
-    if (box.checked) {
-      trackingLost = false;
-      stabilityCounter = 0;
-      positionBuffer = [];
-      rotationBuffer = [];
-      lastValidPosition = new THREE.Vector3();
-      lastValidQuaternion = new THREE.Quaternion();
-      positionStability = 0;
-      showFeedback("Continuous tracking enabled");
-    }
   }
 
   window.show = show;
