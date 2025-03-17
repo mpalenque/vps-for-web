@@ -93,8 +93,8 @@
   const QG = new THREE.Quaternion();
   
   let camera, scene, renderer, clock, pcgeo;
-  let logo, mixer, vastModel, vastMixer;
-  let vastCuartoModel, vastCuartoMixer, maskCuartoModel;
+  let vastModel, vastMixer;
+  let maskCuartoModel;
   let immersal;
   let mapHandle = -1;
   let pointCloud = null;
@@ -376,19 +376,10 @@
   }
 
   function loadContent() {
-    let logoPath = './assets/immersal_LOGO.glb';
     let vastPath = './assets/vast.glb';
     
     // Define missing paths - remove references to them later if files don't exist
-    let vastCuartoPath = './assets/vastcuarto.glb'; // Added definition
     let maskCuartoPath = './assets/maskcuarto.glb'; // Added definition
-
-    // Add a red cube at position 0,0,0
-    const geometry = new THREE.BoxGeometry(0.5, 0.5, 0.5);
-    const material = new THREE.MeshStandardMaterial({ color: 0xff0000 });
-    const cube = new THREE.Mesh(geometry, material);
-    cube.position.set(-10, -10, -10);
-    scene.add(cube);
 
     new THREE.RGBELoader()
       .setPath('./assets/')
@@ -405,22 +396,6 @@
         const gltfLoader = new THREE.GLTFLoader();
         gltfLoader.setDRACOLoader(dracoLoader);
         
-        // Load the logo model
-        gltfLoader.load(logoPath, async function(gltf) {
-          logo = gltf.scene;
-
-          mixer = new THREE.AnimationMixer(gltf.scene);
-          var action = mixer.clipAction(gltf.animations[0]);
-          action.play();
-
-          scene.add(logo);
-          renderer.render(scene, camera);
-
-          contentLoaded = true;
-        }, undefined, function(error) {
-          console.error(error);
-        });
-        
         // Load the vast model with improved handling
         console.log("Starting to load vast model from:", vastPath);
         statusDisplay.innerText = "Status: Loading vast.glb...";
@@ -433,7 +408,7 @@
             
             // Scale and position the vast model
             vastModel.scale.set(1, 1, 1);
-            vastModel.position.set(0, 0, -2); // Position it 2 units in front of camera
+            vastModel.position.set(0, 0, 0); // Position it 2 units in front of camera
             
             // Setup animation for vast model
             if (gltf.animations && gltf.animations.length > 0) {
@@ -485,14 +460,6 @@
           }
         );
 
-        // Comment out or conditionally load these models if files don't exist
-        // Only attempt to load vastcuarto if the path exists
-        if (false) { // Change to a check if file exists or just comment out this block
-          gltfLoader.load(vastCuartoPath, function(gltf) {
-            // ...existing code for vastCuartoModel...
-          });
-        }
-
         // Only attempt to load maskcuarto if the path exists
         if (false) { // Change to a check if file exists or just comment out this block 
           gltfLoader.load(maskCuartoPath, function(gltf) {
@@ -512,7 +479,6 @@
   function updateContent() {
     let dt = clock.getDelta();
     let t = clock.getElapsedTime();
-    if (mixer) mixer.update(dt);
     if (vastMixer) vastMixer.update(dt);
     
     // Check if vastModel exists and make sure it's visible
@@ -527,17 +493,6 @@
       
       // Rotate the model to make it more visible (optional)
       vastModel.rotation.y += dt * 0.0; // Gentle rotation around Y axis
-    }
-    
-    // Only reference defined models
-    if (vastCuartoMixer) vastCuartoMixer.update(dt);
-
-    // Only check vastCuartoModel if it's defined
-    if (typeof vastCuartoModel !== 'undefined' && vastCuartoModel && !vastCuartoModel.visible) {
-      vastCuartoModel.visible = true;
-      vastCuartoModel.traverse(node => {
-        if (node.isMesh) node.visible = true;
-      });
     }
 
     if (plyLoaded) {
