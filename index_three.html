@@ -15,6 +15,12 @@
 <script src="//cdn.jsdelivr.net/gh/mrdoob/three.js@r123/examples/js/loaders/GLTFLoader.js"></script>
 <script src="//cdn.jsdelivr.net/gh/mrdoob/three.js@r123/examples/js/loaders/DRACOLoader.js"></script>
 <script src="//cdn.jsdelivr.net/gh/mrdoob/three.js@r123/examples/js/loaders/RGBELoader.js"></script>
+<style>
+  /* Hide debug UI elements */
+  #uicontainer, #latlon, #locStatus {
+    display: none !important;
+  }
+</style>
 </head>
 
 <body>
@@ -370,6 +376,8 @@
 
       pointCloud = new THREE.Points(geometry, material);
       pointCloud.scale.set(1, 1, 1);
+      // Hide the point cloud while keeping the functionality
+      pointCloud.visible = false;
       scene.add(pointCloud);
       plyLoaded = true;
       console.log(`PLY loaded`);
@@ -638,6 +646,8 @@
       }
     
       attributes.size.needsUpdate = true;
+      // Make sure point cloud stays hidden even after updates
+      if (pointCloud) pointCloud.visible = false;
     }  
   }
 
