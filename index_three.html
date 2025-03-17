@@ -95,7 +95,7 @@
   let camera, scene, renderer, clock, pcgeo;
   let vastModel, vastMixer;
   let signVastModel, signVastMixer;
-  let vastMaskModel;
+  let vastMaskModel;l;
   let immersal;
   let mapHandle = -1;
   let pointCloud = null;
@@ -380,8 +380,8 @@
     let vastPath = './assets/vast.glb';
     let signVastPath = './assets/signvast.glb';
     
-    // Define missing paths - remove references to them later if files don't exist
-    let vastMaskPath = './assets/vastmask.glb'; // Changed from maskcuarto.glb
+    // Define vastmask path
+    let vastMaskPath = './assets/vastmask.glb';
 
     new THREE.RGBELoader()
       .setPath('./assets/')
@@ -525,12 +525,56 @@
           }
         );
 
-        // Only attempt to load vastmask if the path exists
-        if (false) { // Change to a check if file exists or just comment out this block 
-          gltfLoader.load(vastMaskPath, function(gltf) {
-            // ...existing code for vastMaskModel...
-          });
-        }
+        // Load vastmask with occlusion material - enable this by changing false to truets
+        gltfLoader.load(vastMaskPath, 
+          // Success callback {
+          function(gltf) {..
+            console.log("Successfully loaded vastmask.glb");
+            vastMaskModel = gltf.scene;
+            
+            // Scale and position the vastmask model
+            vastMaskModel.scale.set(1, 1, 1);
+            vastMaskModel.position.set(0, 0, 0); // Position it at origin
+            
+            // Apply occlusion material to all meshes
+            vastMaskModel.traverse(function(node) {
+              if (node.isMesh) {
+                // Create occlusion material
+                const occlusionMaterial = new THREE.MeshBasicMaterial({
+                  colorWrite: false,      // Don't write color - invisible
+                  depthWrite: true,       // Do write to depth buffer
+                  side: THREE.DoubleSide, // Render both sides
+                  transparent: false      // Not transparent
+                });
+                
+                // Apply occlusion material
+                node.material = occlusionMaterial;
+                node.renderOrder = -1;    // Render before other objects
+                node.frustumCulled = false;
+                node.visible = true;
+                
+                console.log("Applied occlusion material to mesh in vastmask model:", node.name);
+              }
+            });
+            
+            // Add to scene
+            vastMaskModel.visible = true;
+            scene.add(vastMaskModel);
+            
+            statusDisplay.innerText = "Status: vastmask.glb loaded with occlusion material";
+            console.log("vastMask model added to scene with occlusion material");
+          }, 
+          // Progress callback
+          function(xhr) {
+            const percent = Math.floor(xhr.loaded / xhr.total * 100);
+            console.log('vastmask.glb loading: ' + percent + '%');
+          },
+          // Error callback
+          function(error) {
+            console.error('Error loading vastmask.glb:', error);
+            statusDisplay.innerText = 'Status: Error loading vastmask model: ' + error.message;is
+          }
+        );
       });
 
     const ambient = new THREE.AmbientLight(0x404040); // soft white light
@@ -573,6 +617,17 @@
       
       // Rotate the signVast model to make it more visible
       signVastModel.rotation.y += dt * 0; // Gentle rotation around Y axis
+    }
+    
+    // Check if vastMaskModel exists and make sure it's visible
+    if (vastMaskModel) {
+      if (!vastMaskModel.visible) {
+        console.log("Restoring vastMask model visibility");
+        vastMaskModel.visible = true;
+        vastMaskModel.traverse(node => {
+          if (node.isMesh) node.visible = true;
+        });
+      }
     }
 
     if (plyLoaded) {
