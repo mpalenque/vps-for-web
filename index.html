@@ -177,6 +177,25 @@
             }).catch(error => {
                 console.error('Setup failed:', error);
             });
+
+            // Add Immersal initialization after permissions are granted
+            // This would go in an appropriate place in your initialization process
+            // This is just a placeholder showing how you might integrate the changes
+            // You'll need to import the necessary modules and initialize Immersal
+            /*
+            import { Immersal } from './js/immersal.js';
+            import { immersalParams } from './js/imConfig.js';
+            
+            // Initialize Immersal
+            Immersal.Initialize(document.body, immersalParams)
+              .then(immersal => {
+                console.log("Immersal initialized with 4-second tracking limit");
+                // Your Immersal usage code...
+              })
+              .catch(error => {
+                console.error("Error initializing Immersal:", error);
+              });
+            */
             
             // Animation loop
             function animate() {
