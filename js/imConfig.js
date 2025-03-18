@@ -13,7 +13,7 @@ export const immersalParams = {
       fx: 980,
       fy: 980,
       ox: 480,
-      oy: 360
+      oy: 36
     }
     */
   };
