@@ -282,11 +282,10 @@
 
   const USE_FILTERING = true;
   
-  // Modified tracking state variables to keep continuous tracking
+  // Add tracking state variables
   let trackingFirstDetectedTime = 0;
-  let trackingFreezeDuration = 0; // Set to zero to disable auto-freeze
+  let trackingFreezeDuration = 4000; // 4 seconds in milliseconds
   let trackingHasBeenFrozen = false;
-  let trackingIsContinuous = true; // New flag to enforce continuous tracking
 
   const container = document.getElementById("container");
   const uiContainer = document.getElementById("uicontainer");
@@ -582,17 +581,20 @@
         if (trackingFirstDetectedTime === 0) {
           trackingFirstDetectedTime = timestamp;
           console.log("First successful tracking detected at:", timestamp);
-          showFeedback("Continuous tracking activated");
+          showFeedback("Tracking detected");
         }
         
-        // Remove the freeze section and enforce continuous tracking
-        if (!immersal.continuousLocalization && trackingIsContinuous) {
-          immersal.continuousLocalization = true;
-          console.log("Ensuring continuous tracking remains enabled");
+        // Check if we should freeze tracking after 4 seconds
+        if (!trackingHasBeenFrozen && trackingFirstDetectedTime > 0 && 
+            (timestamp - trackingFirstDetectedTime) >= trackingFreezeDuration) {
+          immersal.continuousLocalization = false;
+          trackingHasBeenFrozen = true;
+          console.log("Tracking frozen after 4 seconds");
+          showFeedback("Tracking position frozen");
           
-          // Update UI to reflect continuous tracking is enabled
+          // Update UI to reflect tracking is now disabled
           if (document.getElementById('contloc')) {
-            document.getElementById('contloc').checked = true;
+            document.getElementById('contloc').checked = false;
           }
         }
 
@@ -1288,20 +1290,6 @@
     if (isIOS) {
       document.getElementById('videoButton').title = "Not available on iOS";
     }
-    
-    // Add a small function to ensure tracking stays continuous
-    const ensureContinuousTracking = () => {
-      if (immersal && !immersal.continuousLocalization) {
-        immersal.continuousLocalization = true;
-        console.log("Re-enabling continuous tracking");
-        if (document.getElementById('contloc')) {
-          document.getElementById('contloc').checked = true;
-        }
-      }
-    };
-    
-    // Check every 5 seconds that tracking remains continuous
-    setInterval(ensureContinuousTracking, 5000);
   });
 
   // UI functions
@@ -1315,11 +1303,8 @@
   }
 
   function toggleLoc(box) {
-    // Force continuous tracking to stay enabled
-    immersal.continuousLocalization = true;
-    box.checked = true; // Always keep the checkbox checked
-    locButton.style.display = "none"; // Always hide the manual localize button
-    showFeedback("Continuous tracking is required");
+    immersal.continuousLocalization = box.checked;
+    locButton.style.display = (box.checked) ? "none" : "block";
   }
 
   window.show = show;
