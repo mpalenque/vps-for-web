@@ -3,7 +3,7 @@ export const immersalParams = {
     mapIds: [121131],  // INSERT YOUR MAP ID/IDS HERE 120793
     continuousLocalization: true,
     continuousInterval: 16, // ms
-    imageDownScale: .75,
+    imageDownScale: 1,
     solverType: 1,
     /* DEBUG with fixed focal length 
     deviceData: {
