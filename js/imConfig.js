@@ -7,7 +7,7 @@ export const immersalParams = {
     solverType: 1,
     /* DEBUG with fixed focal length 5
     deviceData: {
-      model: "Apple MacBook Pro",
+      model: "Apple MacBook Pro",5
       width: 960,
       height: 720,
       fx: 980,
