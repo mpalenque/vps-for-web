@@ -1,0 +1,1348 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta http-equiv="X-UA-Compatible" content="IE=edge">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>VASTronaut AR Experience</title>
+<link rel="stylesheet" href="css/styles.css">
+<meta id="theme-color" name="theme-color" content="#37474F">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<script src="//cdnjs.cloudflare.com/ajax/libs/three.js/r123/three.min.js"></script>
+<script src="//cdn.jsdelivr.net/gh/mrdoob/three.js@r123/examples/js/loaders/PLYLoader.js"></script>
+<script src="//cdn.jsdelivr.net/gh/mrdoob/three.js@r123/examples/js/loaders/GLTFLoader.js"></script>
+<script src="//cdn.jsdelivr.net/gh/mrdoob/three.js@r123/examples/js/loaders/DRACOLoader.js"></script>
+<script src="//cdn.jsdelivr.net/gh/mrdoob/three.js@r123/examples/js/loaders/RGBELoader.js"></script>
+<style>
+  /* Hide debug UI elements */
+  #uicontainer, #latlon, #locStatus {
+    display: none !important;
+  }
+  
+  /* Camera control buttons styling */
+  .camera-controls {
+    position: fixed;
+    bottom: 20px;
+    left: 0;
+    right: 0;
+    display: flex;
+    justify-content: center;
+    gap: 20px;
+    z-index: 1000;
+    display: none; /* Hidden by default, will be shown after camera initialization */
+  }
+  
+  .camera-button {
+    width: 60px;
+    height: 60px;
+    border-radius: 50%;
+    background-color: rgba(255, 255, 255, 0.8);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border: none;
+    cursor: pointer;
+    box-shadow: 0 2px 5px rgba(0, 0, 0, 0.3);
+  }
+  
+  .camera-button svg {
+    width: 30px;
+    height: 30px;
+  }
+  
+  .camera-button.recording {
+    background-color: rgba(255, 0, 0, 0.8);
+  }
+  
+  /* Photo preview modal */
+  .photo-modal {
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background-color: rgba(0, 0, 0, 0.9);
+    z-index: 2000;
+    display: none;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+  }
+  
+  .photo-modal img {
+    max-width: 90%;
+    max-height: 70%;
+    object-fit: contain;
+  }
+  
+  .modal-controls {
+    margin-top: 20px;
+    display: flex;
+    gap: 15px;
+  }
+  
+  .modal-button {
+    padding: 10px 15px;
+    background-color: white;
+    border: none;
+    border-radius: 5px;
+    color: black;
+    font-weight: bold;
+    cursor: pointer;
+  }
+  
+  .modal-button.share-btn {
+    background-color: #0088cc;
+    color: white;
+  }
+  
+  /* Recording UI */
+  .recording-overlay {
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    display: none;
+    flex-direction: column;
+    align-items: center;
+    justify-content: flex-start;
+    z-index: 1500;
+    pointer-events: none;
+  }
+  
+  .recording-indicator {
+    margin-top: 20px;
+    padding: 5px 15px;
+    background-color: rgba(255, 0, 0, 0.7);
+    color: white;
+    border-radius: 20px;
+    font-weight: bold;
+    display: flex;
+    align-items: center;
+  }
+  
+  .recording-dot {
+    width: 12px;
+    height: 12px;
+    background-color: white;
+    border-radius: 50%;
+    margin-right: 8px;
+    animation: pulse 1s infinite;
+  }
+  
+  @keyframes pulse {
+    0% { opacity: 1; }
+    50% { opacity: 0.5; }
+    100% { opacity: 1; }
+  }
+  
+  .countdown-overlay {
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background-color: rgba(0, 0, 0, 0.3);
+    display: none;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    z-index: 1600;
+    pointer-events: none;
+  }
+  
+  .countdown-number {
+    font-size: 80px;
+    color: white;
+    font-weight: bold;
+    text-shadow: 0 0 10px rgba(0,0,0,0.5);
+    animation: zoom-in 1s ease-in-out;
+  }
+  
+  @keyframes zoom-in {
+    0% { transform: scale(0.5); opacity: 0; }
+    50% { transform: scale(1.2); opacity: 1; }
+    100% { transform: scale(1); opacity: 0.8; }
+  }
+  
+  /* Composite capture canvas - used for image/video compositing but hidden */
+  #captureCanvas {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    display: none;
+    z-index: -1;
+  }
+</style>
+</head>
+
+<body>
+<div id="container"></div>
+<div id="uicontainer">
+  <div class="form-group">
+    <input type="radio" id="mode1" name="mode" value="ondevice" checked onclick="hide('serverlocui', this); show('devicelocui', this)"/>
+    <label for="mode1">On-device</label>
+    <input type="radio" id="mode2" name="mode" value="onserver" onclick="hide('devicelocui', this); show('serverlocui', this)"/>
+    <label for="mode2">On-server</label>
+  </div>
+  <div id="devicelocui" class="form-group">
+    <input type="checkbox" id="contloc" checked onclick="toggleLoc(this)"/>
+    <label for="contloc">Continuous localization</label>
+    <button id="locButton" class="button">Localize on device</button>
+  </div>
+  <div id="serverlocui" class="form-group">
+    <button id="locServerButton" class="button">Localize on server</button>
+  </div>
+  <div id="latlon">lat: <span id="latitude">0</span>, lon: <span id="longitude">0</span>, alt: <span id="altitude">0</span></div>
+  <div id="locStatus" style="color: white; background-color: rgba(0,0,0,0.5); padding: 5px; margin-top: 5px;">Status: Waiting for initialization</div>
+</div>
+<div style="
+  position: fixed;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  z-index: 1000;
+">
+  <div id="enterArText" style="
+    color: white;
+    font-weight: bold;
+    font-size: 17.6px;
+    text-shadow: 1px 1px 2px rgba(0,0,0,0.8);
+    margin-bottom: 10px;
+    position: relative;
+    top: -30px;
+  ">ENTER AR</div>
+  <button id="permButton" class="button" style="
+    width: 61.44px;
+    height: 61.44px;
+    border-radius: 50%;
+    background-color: white;
+    background-image: url('assets/vast.png');
+    background-size: 66.7%;
+    background-position: center;
+    background-repeat: no-repeat;
+    border: 2px solid #ccc;
+    box-shadow: 0 2px 5px rgba(0,0,0,0.2);
+    padding: 0;
+    cursor: pointer;
+    font-size: 0;
+  ">Start AR</button>
+</div>
+
+<!-- Add photo preview modal -->
+<div id="photoModal" class="photo-modal">
+  <img id="photoPreview" src="" alt="Captured photo">
+  <div class="modal-controls">
+    <button id="sharePhotoBtn" class="modal-button share-btn">Save to Photos</button>
+    <button id="closeModalBtn" class="modal-button">Close</button>
+  </div>
+</div>
+
+<!-- Add camera control buttons -->
+<div id="cameraControls" class="camera-controls">
+  <button id="photoButton" class="camera-button" title="Take Photo">
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="black">
+      <circle cx="12" cy="12" r="3.2"/>
+      <path d="M9 2L7.17 4H4c-1.1 0-2 .9-2 2v12c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2V6c0-1.1-.9-2-2-2h-3.17L15 2H9zm3 15c-2.76 0-5-2.24-5-5s2.24-5 5-5 5 2.24 5 5-2.24 5-5 5z"/>
+    </svg>
+  </button>
+  <button id="videoButton" class="camera-button" title="Record Video">
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="black">
+      <path d="M17 10.5V7c0-.55-.45-1-1-1H4c-.55 0-1 .45-1 1v10c0 .55.45 1 1 1h12c.55 0 1-.45 1-1v-3.5l4 4v-11l-4 4z"/>
+    </svg>
+  </button>
+</div>
+
+<!-- Recording UI elements -->
+<div id="recordingOverlay" class="recording-overlay">
+  <div class="recording-indicator">
+    <div class="recording-dot"></div>
+    <span id="recordingTimer">00:00</span>
+  </div>
+</div>
+
+<div id="countdownOverlay" class="countdown-overlay">
+  <div class="countdown-number" id="countdownNumber">3</div>
+</div>
+
+<!-- Canvas used for compositing camera feed and AR content -->
+<canvas id="captureCanvas"></canvas>
+
+<script type="module">
+  import { immersalParams } from './js/imConfig.js';
+  import { Immersal, createOrientationSensor } from './js/immersal.js';
+
+  const USE_FILTERING = true;
+  
+  // Add tracking state variables
+  let trackingFirstDetectedTime = 0;
+  let trackingFreezeDuration = 4000; // 4 seconds in milliseconds
+  let trackingHasBeenFrozen = false;
+
+  const container = document.getElementById("container");
+  const uiContainer = document.getElementById("uicontainer");
+  const permButton = document.getElementById("permButton");
+  const locButton = document.getElementById("locButton");
+  const locServerButton = document.getElementById("locServerButton");
+  const lat = document.getElementById("latitude");
+  const lon = document.getElementById("longitude");
+  const alt = document.getElementById("altitude");
+  const statusDisplay = document.getElementById("locStatus");
+
+  const P = new THREE.Vector3();
+  const Q = new THREE.Quaternion();
+  const QG = new THREE.Quaternion();
+  
+  let camera, scene, renderer, clock, pcgeo;
+  let vastModel, vastMixer;
+  let signVastModel, signVastMixer;
+  let vastMaskModel; // Fixed the syntax error: removed "l;"
+  let immersal;
+  let mapHandle = -1;
+  let pointCloud = null;
+  let plyLoaded = false;
+  let contentLoaded = false;
+  let prevTime = 0;
+  let mediaRecorder = null;
+  let recordedChunks = [];
+  let isRecording = false;
+  let isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent) && !window.MSStream;
+  let recordingStartTime = 0;
+  let recordingTimerInterval = null;
+  let captureCanvas = null;
+  let captureContext = null;
+  let cameraVideoElement = null;
+
+  const init = async () => {
+    const mapId = immersalParams.mapIds[0];
+
+    try {
+      statusDisplay.innerText = "Status: Initializing Immersal...";
+      console.log("Initializing Immersal with map ID:", mapId);
+      
+      // Make sure we have all correct permissions
+      if (navigator.mediaDevices && navigator.mediaDevices.getUserMedia) {
+        try {
+          const stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment' } });
+          console.log("Camera permission granted:", stream);
+          // Stop the stream as Immersal will request it again
+          stream.getTracks().forEach(track => track.stop());
+        } catch (err) {
+          console.error("Camera permission error:", err);
+          statusDisplay.innerText = "Status: Camera error - " + err.message;
+        }
+      }
+      
+      immersal = await Immersal.Initialize(container, immersalParams);
+      console.log("Immersal initialized");
+      statusDisplay.innerText = "Status: Immersal initialized, loading map...";
+      
+      mapHandle = await immersal.loadMap(mapId);
+      console.log(`Map handle: ${mapHandle}`);
+      statusDisplay.innerText = `Status: Map loaded (handle: ${mapHandle})`;
+
+      // Add event listeners for Immersal events
+      immersal.addEventListener('localized', function(e) {
+        console.log("Localization success event:", e.detail);
+        statusDisplay.innerText = "Status: Localized successfully";
+      });
+      
+      immersal.addEventListener('localization-failed', function(e) {
+        console.log("Localization failed event:", e.detail);
+        statusDisplay.innerText = "Status: Localization failed - " + (e.detail.error || "unknown error");
+      });
+
+      camera = new THREE.PerspectiveCamera(45, window.innerWidth / window.innerHeight, 0.001, 10000);
+      scene = new THREE.Scene();
+
+      // renderer
+      renderer = new THREE.WebGLRenderer({ 
+        antialias: true, 
+        alpha: true,
+        preserveDrawingBuffer: true 
+      });
+      renderer.setPixelRatio(window.devicePixelRatio);
+      renderer.toneMapping = THREE.ACESFilmicToneMapping;
+      renderer.toneMappingExposure = 1;
+
+      resize();
+
+      container.appendChild(renderer.domElement);
+
+      immersal.addEventListener('resize', resize);
+
+      // content
+      loadPLY(mapId);
+      loadContent();
+
+      uiContainer.style.display = "block";
+
+      // clock
+      clock = new THREE.Clock();
+
+      animate();
+      
+      // Force an initial localization attempt after a short delay
+      setTimeout(() => {
+        statusDisplay.innerText = "Status: Starting initial localization...";
+        immersal.localizeDeviceAsync()
+          .then(result => {
+            console.log("Initial localization result:", result);
+            if (result && result.success) {
+              statusDisplay.innerText = "Status: Initial localization successful";
+            } else {
+              statusDisplay.innerText = "Status: Initial localization failed";
+            }
+          })
+          .catch(e => {
+            console.error("Initial localization error:", e);
+            statusDisplay.innerText = "Status: Initial localization error";
+          });
+      }, 2000);
+      
+      // After initialization is complete and camera is running, display the camera controls
+      document.getElementById('cameraControls').style.display = 'flex';
+      
+      // Setup capture canvas for composite recording
+      setupCaptureCanvas();
+      
+      // Find the camera video element for compositing
+      setTimeout(findCameraElement, 500);
+      
+    } catch (error) {
+      console.error("Initialization error:", error);
+      statusDisplay.innerText = "Status: Initialization error - " + error.message;
+    }
+  }
+
+  // Find the camera video element that Immersal created
+  function findCameraElement() {
+    // Immersal typically creates a video element for the camera feed
+    const videos = document.querySelectorAll('video');
+    videos.forEach(video => {
+      // Check if this is likely to be the camera feed video
+      if (video.srcObject && video.srcObject.getVideoTracks().length > 0) {
+        console.log("Found camera video element:", video);
+        cameraVideoElement = video;
+      }
+    });
+    
+    if (!cameraVideoElement && immersal && immersal.camera && immersal.camera.el) {
+      console.log("Using Immersal camera element");
+      cameraVideoElement = immersal.camera.el;
+    }
+    
+    if (!cameraVideoElement) {
+      console.warn("Could not find camera video element, will retry");
+      setTimeout(findCameraElement, 1000);
+    }
+  }
+  
+  // Setup canvas for composite capture
+  function setupCaptureCanvas() {
+    captureCanvas = document.getElementById('captureCanvas');
+    captureContext = captureCanvas.getContext('2d');
+    
+    // Set canvas size to match viewport
+    const resizeCanvas = () => {
+      captureCanvas.width = window.innerWidth;
+      captureCanvas.height = window.innerHeight;
+    };
+    
+    resizeCanvas();
+    window.addEventListener('resize', resizeCanvas);
+  }
+
+  // Create a composite frame with both camera feed and AR content
+  function captureCompositeFrame() {
+    if (!captureCanvas || !captureContext || !renderer || !cameraVideoElement) {
+      console.warn("Cannot create composite frame - missing elements");
+      return null;
+    }
+    
+    // Clear canvas
+    captureContext.clearRect(0, 0, captureCanvas.width, captureCanvas.height);
+    
+    try {
+      // First draw the camera feed
+      captureContext.drawImage(
+        cameraVideoElement, 
+        0, 0, 
+        captureCanvas.width, captureCanvas.height
+      );
+      
+      // Then overlay the WebGL renderer's content
+      captureContext.drawImage(
+        renderer.domElement, 
+        0, 0, 
+        captureCanvas.width, captureCanvas.height
+      );
+      
+      return captureCanvas;
+    } catch (err) {
+      console.error("Error creating composite frame:", err);
+      return null;
+    }
+  }
+
+  permButton.addEventListener("click", function(e) {
+    createOrientationSensor().then(() => {
+      permButton.style.visibility = "hidden";
+      document.getElementById("enterArText").style.display = "none";
+      statusDisplay.innerText = "Status: Starting initialization...";
+      init();
+    }).catch(error => {
+      console.error("Orientation sensor error:", error);
+      statusDisplay.innerText = "Status: Orientation sensor error - " + error.message;
+    });
+  });
+
+  locButton.addEventListener("click", function(e) {
+    if (immersal) {
+      statusDisplay.innerText = "Status: Localizing on device...";
+      console.log("Starting on-device localization...");
+      
+      immersal.localizeDeviceAsync()
+      .then(result => {
+        console.log(`[IMMERSAL] On-device localization result:`, result);
+        if (result && result.success) {
+          statusDisplay.innerText = "Status: Localization successful";
+          
+          // Try to manually update the camera position after localization
+          if (immersal.localizeInfo && immersal.localizeInfo.position) {
+            const pos = immersal.localizeInfo.position;
+            const rot = immersal.localizeInfo.rotation;
+            
+            console.log("Setting camera to position:", pos);
+            camera.position.set(pos.x, pos.y, pos.z);
+            camera.quaternion.set(rot.x, rot.y, rot.z, rot.w);
+          }
+        } else {
+          statusDisplay.innerText = "Status: Localization failed";
+        }
+      })
+      .catch(e => {
+        console.error("Localization error:", e);
+        statusDisplay.innerText = "Status: Localization error - " + e.message;
+      });
+    } else {
+      statusDisplay.innerText = "Status: Immersal not initialized";
+    }
+  });
+
+  locServerButton.addEventListener("click", function(e) {
+    if (immersal) {
+      immersal.localizeServerAsync()
+      .then(result => {
+        console.log(`[IMMERSAL] On-server localization result:`, result);
+      })
+      .catch(e => {
+        console.log(e);
+      });
+    }
+  });
+
+  const resize = (e) => {
+    if (!immersal.camera) return;
+    const w = immersal.camera.el.width;
+    const h = immersal.camera.el.height;
+    camera.aspect = w / h;
+    camera.updateProjectionMatrix();
+    renderer.setSize(w, h);
+  }
+
+  const animate = () => {
+    renderer.setAnimationLoop(render);
+  }
+
+  const render = (time) => {
+    const timestamp = performance.now();
+    const dt = timestamp - prevTime;
+    prevTime = timestamp;
+
+    try {
+      if (mapHandle >= 0 && immersal && immersal.continuousLocalization) {
+        immersal.localizeDevice(timestamp);
+      }
+
+      if (immersal && immersal.localization && immersal.localization.counter > 1) {
+        camera.fov = immersal.getVFov();
+        camera.updateProjectionMatrix();
+
+        // Detect when tracking first starts (first successful localization)
+        if (trackingFirstDetectedTime === 0) {
+          trackingFirstDetectedTime = timestamp;
+          console.log("First successful tracking detected at:", timestamp);
+          showFeedback("Tracking detected");
+        }
+        
+        // Check if we should freeze tracking after 4 seconds
+        if (!trackingHasBeenFrozen && trackingFirstDetectedTime > 0 && 
+            (timestamp - trackingFirstDetectedTime) >= trackingFreezeDuration) {
+          immersal.continuousLocalization = false;
+          trackingHasBeenFrozen = true;
+          console.log("Tracking frozen after 4 seconds");
+          showFeedback("Tracking position frozen");
+          
+          // Update UI to reflect tracking is now disabled
+          if (document.getElementById('contloc')) {
+            document.getElementById('contloc').checked = false;
+          }
+        }
+
+        // Debug print every 1 second
+        if (Math.floor(timestamp / 1000) !== Math.floor(prevTime / 1000)) {
+          console.log("Localization count:", immersal.localization.counter);
+          console.log("Camera position:", camera.position);
+        }
+        
+        const {position, rotation, elapsedTime, wgs84} = immersal.localizeInfo;
+
+        if (immersal.continuousLocalization) {
+          try {
+            const pose = immersal.getEstimatedPose(timestamp);
+            
+            if (pose && pose.position && pose.rotation) {
+              P.set(pose.position[0], pose.position[1], pose.position[2]);
+              Q.set(pose.rotation[0], pose.rotation[1], pose.rotation[2], pose.rotation[3]);
+              
+              if (immersal.gyroData) {
+                QG.set(immersal.gyroData.x, immersal.gyroData.y, immersal.gyroData.z, immersal.gyroData.w);
+                Q.multiply(QG);
+              }
+
+              if (USE_FILTERING) {
+                let step = 0.025 * dt;
+                if (step > 1.0) step = 1.0;
+
+                camera.position.lerp(P, step);
+                camera.quaternion.slerp(Q, step);
+              } else {
+                camera.position.set(P.x, P.y, P.z);
+                camera.quaternion.set(Q.x, Q.y, Q.z, Q.w);
+              }
+            } else {
+              console.warn("Invalid pose data:", pose);
+            }
+          } catch (err) {
+            console.error("Error in pose estimation:", err);
+          }
+        } else {
+          P.set(position.x, position.y, position.z);
+          Q.set(rotation.x, rotation.y, rotation.z, rotation.w);
+          QG.set(immersal.gyroData.x, immersal.gyroData.y, immersal.gyroData.z, immersal.gyroData.w);
+          Q.multiply(QG);
+          camera.position.set(P.x, P.y, P.z);
+          camera.quaternion.set(Q.x, Q.y, Q.z, Q.w);
+        }
+
+        if (wgs84) {
+          lat.innerHTML = wgs84.latitude.toFixed(5);
+          lon.innerHTML = wgs84.longitude.toFixed(5);
+          alt.innerHTML = wgs84.altitude.toFixed(5);
+        }
+      } else if (immersal && immersal.localization) {
+        // No localization yet
+        if (Math.floor(timestamp / 5000) !== Math.floor(prevTime / 5000)) {
+          console.log("Waiting for localization, counter:", 
+            immersal.localization ? immersal.localization.counter : "undefined");
+        }
+      }
+
+      updateContent();
+      renderer.render(scene, camera);
+    } catch (error) {
+      console.error("Render error:", error);
+    }
+  }
+
+  // Load a .ply file from Immersal to visualize localization.
+  // Switch DOWNLOAD_SPARSE to DOWNLOAD_DENSE if you want to use the dense point cloud.
+  function loadPLY(mapId) {
+    console.log(`Loading .ply for map: [${mapId}]`);
+    const loader = new THREE.PLYLoader();
+    const url = Immersal.BASE_URL + Immersal.DOWNLOAD_SPARSE + '?token=' + immersalParams.developerToken + '&id=' + mapId;
+
+    loader.load(url, function(geometry) {
+      pcgeo = geometry;
+      geometry.computeVertexNormals();
+      geometry.computeFaceNormals();
+
+      // sizes
+      let vCount = geometry.getAttribute('position').count;
+      const sizes = new Float32Array(vCount);
+      for (let i = 0; i < vCount; i++) {
+        sizes[i] = 1;
+      }
+      geometry.setAttribute('size', new THREE.BufferAttribute(sizes, 1));
+
+      const material = new THREE.PointsMaterial({ color: 0xFFFF00, vertexColors: THREE.VertexColors, size: 4, sizeAttenuation: false } );
+
+      pointCloud = new THREE.Points(geometry, material);
+      pointCloud.scale.set(1, 1, 1);
+      // Hide the point cloud while keeping the functionality
+      pointCloud.visible = false;
+      scene.add(pointCloud);
+      plyLoaded = true;
+      console.log(`PLY loaded`);
+    });
+  }
+
+  function loadContent() {
+    let vastPath = './assets/vast.glb';
+    let signVastPath = './assets/signvast.glb';
+    
+    // Define vastmask path
+    let vastMaskPath = './assets/vastmask.glb';
+
+    new THREE.RGBELoader()
+      .setPath('./assets/')
+      .load('palermo_1k.hdr', function(texture) {
+        texture.mapping = THREE.EquirectangularReflectionMapping;
+        scene.environment = texture;
+        renderer.render(scene, camera);
+
+        // Setup DRACOLoader for compressed models
+        const dracoLoader = new THREE.DRACOLoader();
+        dracoLoader.setDecoderPath('//cdn.jsdelivr.net/gh/mrdoob/three.js@r123/examples/js/libs/draco/');
+        
+        // model loader with DRACO support
+        const gltfLoader = new THREE.GLTFLoader();
+        gltfLoader.setDRACOLoader(dracoLoader);
+        
+        // Load the vast model with improved handling
+        console.log("Starting to load vast model from:", vastPath);
+        statusDisplay.innerText = "Status: Loading vast.glb...";
+        
+        gltfLoader.load(vastPath, 
+          // Success callback
+          function(gltf) {
+            console.log("Successfully loaded vast.glb");
+            vastModel = gltf.scene;
+            
+            // Scale and position the vast model
+            vastModel.scale.set(1, 1, 1);
+            vastModel.position.set(0, 0, 0); // Position it at origin
+            
+            // Setup animation for vast model
+            if (gltf.animations && gltf.animations.length > 0) {
+              vastMixer = new THREE.AnimationMixer(gltf.scene);
+              gltf.animations.forEach((clip, index) => {
+                const action = vastMixer.clipAction(clip);
+                action.play();
+                console.log(`Started animation ${index}: ${clip.name}`);
+              });
+              console.log(`Started playing ${gltf.animations.length} animations for vast model`);
+            } else {
+              console.log("No animations found in vast model");
+            }
+            
+            // Ensure all meshes in the model have proper rendering settings
+            vastModel.traverse(function(node) {
+              if (node.isMesh) {
+                node.frustumCulled = false; // Prevent disappearing due to frustum culling
+                node.material.side = THREE.DoubleSide; // Render both sides
+                node.material.transparent = true;
+                node.material.opacity = 1.0;
+                node.material.depthTest = true;
+                node.material.needsUpdate = true;
+                node.visible = true;
+                console.log("Processed mesh in vast model:", node.name);
+              }
+            });
+            
+            // Add to scene with explicit visibility setting
+            vastModel.visible = true;
+            scene.add(vastModel);
+            
+            statusDisplay.innerText = "Status: vast.glb loaded successfully";
+            console.log("Vast model added to scene with visibility:", vastModel.visible);
+            
+            // Force a render to show the model
+            renderer.render(scene, camera);
+          }, 
+          // Progress callback
+          function(xhr) {
+            const percent = Math.floor(xhr.loaded / xhr.total * 100);
+            console.log('vast.glb loading: ' + percent + '%');
+            statusDisplay.innerText = `Status: Loading vast model: ${percent}%`;
+          },
+          // Error callback
+          function(error) {
+            console.error('Error loading vast.glb:', error);
+            statusDisplay.innerText = 'Status: Error loading vast model: ' + error.message;
+          }
+        );
+
+        // Load the signvast.glb model
+        console.log("Starting to load signvast model from:", signVastPath);
+        statusDisplay.innerText = "Status: Loading signvast.glb...";
+        
+        gltfLoader.load(signVastPath, 
+          // Success callback
+          function(gltf) {
+            console.log("Successfully loaded signvast.glb");
+            signVastModel = gltf.scene;
+            
+            // Scale and position the signvast model
+            signVastModel.scale.set(1, 1, 1);
+            signVastModel.position.set(0, 0, -2); // Position it 2 units in front
+            
+            // Setup animation for signvast model if it has animations
+            if (gltf.animations && gltf.animations.length > 0) {
+              signVastMixer = new THREE.AnimationMixer(gltf.scene);
+              gltf.animations.forEach((clip, index) => {
+                const action = signVastMixer.clipAction(clip);
+                action.play();
+                console.log(`Started animation ${index}: ${clip.name}`);
+              });
+              console.log(`Started playing ${gltf.animations.length} animations for signvast model`);
+            } else {
+              console.log("No animations found in signvast model");
+            }
+            
+            // Ensure all meshes in the model have proper rendering settings
+            signVastModel.traverse(function(node) {
+              if (node.isMesh) {
+                node.frustumCulled = false; // Prevent disappearing due to frustum culling
+                node.material.side = THREE.DoubleSide; // Render both sides
+                node.material.transparent = true;
+                node.material.opacity = 1.0;
+                node.material.depthTest = true;
+                node.material.needsUpdate = true;
+                node.visible = true;
+                console.log("Processed mesh in signvast model:", node.name);
+              }
+            });
+            
+            // Add to scene with explicit visibility setting
+            signVastModel.visible = true;
+            scene.add(signVastModel);
+            
+            statusDisplay.innerText = "Status: signvast.glb loaded successfully";
+            console.log("signVast model added to scene with visibility:", signVastModel.visible);
+            
+            // Force a render to show the model
+            renderer.render(scene, camera);
+          }, 
+          // Progress callback
+          function(xhr) {
+            const percent = Math.floor(xhr.loaded / xhr.total * 100);
+            console.log('signvast.glb loading: ' + percent + '%');
+          },
+          // Error callback
+          function(error) {
+            console.error('Error loading signvast.glb:', error);
+            statusDisplay.innerText = 'Status: Error loading signvast model: ' + error.message;
+          }
+        );
+
+        // Load vastmask with occlusion material - enable this by changing false to truets
+        gltfLoader.load(vastMaskPath, 
+          // Success callback
+          function(gltf) { // Fixed syntax error: removed extra "."
+            console.log("Successfully loaded vastmask.glb");
+            vastMaskModel = gltf.scene;
+            
+            // Scale and position the vastmask model
+            vastMaskModel.scale.set(1, 1, 1);
+            vastMaskModel.position.set(0, 0, 0); // Position it at origin
+            
+            // Apply occlusion material to all meshes
+            vastMaskModel.traverse(function(node) {
+              if (node.isMesh) {
+                // Create occlusion material
+                const occlusionMaterial = new THREE.MeshBasicMaterial({
+                  colorWrite: false,      // Don't write color - invisible
+                  depthWrite: true,       // Do write to depth buffer
+                  side: THREE.DoubleSide, // Render both sides
+                  transparent: false      // Not transparent
+                });
+                
+                // Apply occlusion material
+                node.material = occlusionMaterial;
+                node.renderOrder = -1;    // Render before other objects
+                node.frustumCulled = false;
+                node.visible = true;
+                
+                console.log("Applied occlusion material to mesh in vastmask model:", node.name);
+              }
+            });
+            
+            // Add to scene
+            vastMaskModel.visible = true;
+            scene.add(vastMaskModel);
+            
+            statusDisplay.innerText = "Status: vastmask.glb loaded with occlusion material";
+            console.log("vastMask model added to scene with occlusion material");
+          }, 
+          // Progress callback
+          function(xhr) {
+            const percent = Math.floor(xhr.loaded / xhr.total * 100);
+            console.log('vastmask.glb loading: ' + percent + '%');
+          },
+          // Error callback
+          function(error) {
+            console.error('Error loading vastmask.glb:', error);
+            statusDisplay.innerText = 'Status: Error loading vastmask model: ' + error.message;
+          }
+        );
+      });
+
+    const ambient = new THREE.AmbientLight(0x404040); // soft white light
+    scene.add(ambient);
+
+    let directional = new THREE.DirectionalLight(0x101820, 0.5);
+    directional.position.set(-1, 1, 0);
+    scene.add(directional);
+  }
+
+  function updateContent() {
+    let dt = clock.getDelta();
+    let t = clock.getElapsedTime();
+    if (vastMixer) vastMixer.update(dt);
+    if (signVastMixer) signVastMixer.update(dt);
+    
+    // Check if vastModel exists and make sure it's visible
+    if (vastModel) {
+      if (!vastModel.visible) {
+        console.log("Restoring vast model visibility");
+        vastModel.visible = true;
+        vastModel.traverse(node => {
+          if (node.isMesh) node.visible = true;
+        });
+      }
+      
+      // Rotate the model to make it more visible (optional)
+      vastModel.rotation.y += dt * 0.0; // Gentle rotation around Y axis
+    }
+
+    // Check if signVastModel exists and make sure it's visible
+    if (signVastModel) {
+      if (!signVastModel.visible) {
+        console.log("Restoring signVast model visibility");
+        signVastModel.visible = true;
+        signVastModel.traverse(node => {
+          if (node.isMesh) node.visible = true;
+        });
+      }
+      
+      // Rotate the signVast model to make it more visible
+      signVastModel.rotation.y += dt * 0; // Gentle rotation around Y axis
+    }
+    
+    // Check if vastMaskModel exists and make sure it's visible
+    if (vastMaskModel) {
+      if (!vastMaskModel.visible) {
+        console.log("Restoring vastMask model visibility");
+        vastMaskModel.visible = true;
+        vastMaskModel.traverse(node => {
+          if (node.isMesh) node.visible = true;
+        });
+      }
+    }
+
+    if (plyLoaded) {
+      const attributes = pcgeo.attributes;
+
+      for (let i = 0; i < attributes.size.array.length; i ++) {
+        attributes.size.array[i] = 14 + 13 * Math.sin(0.1 * i + (t*2));
+      }
+    
+      attributes.size.needsUpdate = true;
+      // Make sure point cloud stays hidden even after updates
+      if (pointCloud) pointCloud.visible = false;
+    }  
+  }
+
+  // Add a function to check the map validity
+  function checkMap(mapId) {
+    console.log(`Checking map: [${mapId}]`);
+    const checkUrl = Immersal.BASE_URL + '/map/get' + '?token=' + immersalParams.developerToken + '&id=' + mapId;
+    
+    fetch(checkUrl)
+      .then(response => response.json())
+      .then(data => {
+        console.log("Map check result:", data);
+        if (data && data.error === "none") {
+          statusDisplay.innerText = `Status: Map verified - ${data.name || mapId}`;
+        } else {
+          statusDisplay.innerText = `Status: Map error - ${data.error || "unknown"}`;
+        }
+      })
+      .catch(error => {
+        console.error("Map check error:", error);
+        statusDisplay.innerText = "Status: Map check error";
+      });
+  }
+
+  // Photo and video recording functions
+  function takePhoto() {
+    try {
+      const compositeCanvas = captureCompositeFrame();
+      
+      if (!compositeCanvas) {
+        // Fallback to just capturing the WebGL canvas if compositing fails
+        const imgDataUrl = renderer.domElement.toDataURL('image/png');
+        showCapturedImage(imgDataUrl);
+        return;
+      }
+      
+      // Get data URL from the composite canvas
+      const imgDataUrl = compositeCanvas.toDataURL('image/png');
+      showCapturedImage(imgDataUrl);
+      
+    } catch (err) {
+      console.error('Error taking photo:', err);
+      showFeedback('Error saving photo');
+    }
+  }
+  
+  function showCapturedImage(imgDataUrl) {
+    if (isIOS) {
+      // On iOS, show the image in a modal with save option
+      const photoPreview = document.getElementById('photoPreview');
+      photoPreview.src = imgDataUrl;
+      document.getElementById('photoModal').style.display = 'flex';
+      showFeedback('Use "Save to Photos" to add to your camera roll');
+    } else {
+      // For other devices, use download approach
+      const link = document.createElement('a');
+      link.download = 'vastronaut-ar-photo-' + new Date().toISOString().replace(/[:\.]/g, '-') + '.png';
+      link.href = imgDataUrl;
+      link.click();
+      showFeedback('Photo saved to downloads');
+    }
+  }
+  
+  function sharePhoto() {
+    const imgSrc = document.getElementById('photoPreview').src;
+    
+    if (navigator.share) {
+      // Use Web Share API if available (works well on iOS)
+      fetch(imgSrc)
+        .then(res => res.blob())
+        .then(blob => {
+          const file = new File([blob], 'vastronaut-photo.png', { type: 'image/png' });
+          navigator.share({
+            title: 'VASTronaut AR Photo',
+            files: [file]
+          }).then(() => {
+            showFeedback('Shared successfully');
+            closePhotoModal();
+          }).catch(error => {
+            console.error('Error sharing:', error);
+            showFeedback('Error sharing photo');
+          });
+        });
+    } else {
+      // Fallback for browsers without Web Share API
+      window.open(imgSrc);
+      showFeedback('Photo opened in new tab. Right-click to save');
+    }
+  }
+  
+  function closePhotoModal() {
+    document.getElementById('photoModal').style.display = 'none';
+  }
+  
+  function startCountdown(callback) {
+    const countdownOverlay = document.getElementById('countdownOverlay');
+    const countdownNumber = document.getElementById('countdownNumber');
+    let count = 3;
+    
+    // Show overlay with initial count
+    countdownOverlay.style.display = 'flex';
+    countdownNumber.textContent = count;
+    
+    // Update countdown every second
+    const interval = setInterval(() => {
+      count--;
+      
+      if (count <= 0) {
+        // Countdown finished
+        clearInterval(interval);
+        countdownOverlay.style.display = 'none';
+        callback(); // Execute the callback (start recording)
+      } else {
+        // Update displayed number with animation
+        countdownNumber.style.animation = 'none';
+        setTimeout(() => {
+          countdownNumber.style.animation = 'zoom-in 1s ease-in-out';
+          countdownNumber.textContent = count;
+        }, 10);
+      }
+    }, 1000);
+  }
+  
+  function updateRecordingTimer() {
+    const elapsed = (Date.now() - recordingStartTime) / 1000;
+    const minutes = Math.floor(elapsed / 60).toString().padStart(2, '0');
+    const seconds = Math.floor(elapsed % 60).toString().padStart(2, '0');
+    document.getElementById('recordingTimer').textContent = `${minutes}:${seconds}`;
+  }
+  
+  function toggleVideoRecording() {
+    const videoButton = document.getElementById('videoButton');
+    const recordingOverlay = document.getElementById('recordingOverlay');
+    
+    // Don't allow starting a new recording if already recording
+    if (isRecording) {
+      stopRecording();
+      return;
+    }
+    
+    // Start countdown before recording
+    startCountdown(() => {
+      // This function is called after countdown completes
+      startRecording();
+    });
+  }
+  
+  function startRecording() {
+    // Create a composite recording using both camera and AR content
+    try {
+      const videoButton = document.getElementById('videoButton');
+      const recordingOverlay = document.getElementById('recordingOverlay');
+      recordedChunks = [];
+      
+      // Setup and show recording UI
+      recordingStartTime = Date.now();
+      updateRecordingTimer();
+      recordingTimerInterval = setInterval(updateRecordingTimer, 1000);
+      recordingOverlay.style.display = 'flex';
+      videoButton.classList.add('recording');
+      
+      // Create a stream from our composite canvas
+      const compositeStream = captureCanvas.captureStream(30); // 30 FPS
+      
+      // Get audio from user's microphone (optional)
+      navigator.mediaDevices.getUserMedia({ audio: true, video: false })
+      .then(audioStream => {
+        // Add audio tracks from microphone to the composite stream
+        audioStream.getAudioTracks().forEach(track => {
+          compositeStream.addTrack(track);
+        });
+        
+        // Now start the recording with the combined stream
+        startMediaRecorder(compositeStream);
+      })
+      .catch(err => {
+        // If we can't get audio, just record without it
+        console.warn("Could not get audio stream for recording:", err);
+        startMediaRecorder(compositeStream);
+      });
+    } catch (err) {
+      console.error('Error starting recording:', err);
+      showFeedback('Error starting recording: ' + err.message);
+    }
+  }
+  
+  function startMediaRecorder(stream) {
+    // Determine supported MIME types
+    let mimeType = '';
+    if (MediaRecorder.isTypeSupported('video/mp4')) {
+      mimeType = 'video/mp4';
+    } else if (MediaRecorder.isTypeSupported('video/webm;codecs=h264')) {
+      mimeType = 'video/webm;codecs=h264';
+    } else if (MediaRecorder.isTypeSupported('video/webm;codecs=vp9')) {
+      mimeType = 'video/webm;codecs=vp9';
+    } else if (MediaRecorder.isTypeSupported('video/webm')) {
+      mimeType = 'video/webm';
+    }
+    
+    // For iOS, we may need to use a different approach
+    if (isIOS) {
+      // Using MediaRecorder with basic settings for iOS
+      mediaRecorder = new MediaRecorder(stream);
+    } else {
+      // Use determined MIME type for other platforms
+      const options = mimeType ? { mimeType } : {};
+      mediaRecorder = new MediaRecorder(stream, options);
+    }
+    
+    mediaRecorder.ondataavailable = (event) => {
+      if (event.data && event.data.size > 0) {
+        recordedChunks.push(event.data);
+      }
+    };
+    
+    mediaRecorder.onstop = finishRecording;
+    
+    // Start actual recording
+    mediaRecorder.start(1000); // Collect data in chunks of 1 second
+    isRecording = true;
+    
+    // Setup animation loop to continuously update the composite canvas with new frames
+    setupCompositeRenderingLoop();
+  }
+  
+  function setupCompositeRenderingLoop() {
+    if (!isRecording) return;
+    
+    // Update the capture canvas with the latest composite frame
+    captureCompositeFrame();
+    
+    // Continue the loop while recording
+    requestAnimationFrame(setupCompositeRenderingLoop);
+  }
+  
+  function stopRecording() {
+    if (mediaRecorder && isRecording) {
+      mediaRecorder.stop();
+      clearInterval(recordingTimerInterval);
+      
+      // Hide recording UI
+      document.getElementById('recordingOverlay').style.display = 'none';
+      document.getElementById('videoButton').classList.remove('recording');
+      
+      isRecording = false;
+      showFeedback('Processing video...');
+    }
+  }
+  
+  function finishRecording() {
+    // Get the appropriate file extension based on mime type
+    let fileExt = '.webm';
+    let mimeType = 'video/webm';
+    
+    if (mediaRecorder.mimeType.includes('mp4')) {
+      fileExt = '.mp4';
+      mimeType = 'video/mp4';
+    }
+    
+    // Create blob from recorded chunks
+    const blob = new Blob(recordedChunks, { type: mimeType });
+    
+    // If on iOS, show share sheet
+    if (isIOS && navigator.share) {
+      const file = new File([blob], 'vastronaut-ar-video' + fileExt, { type: mimeType });
+      navigator.share({
+        title: 'VASTronaut AR Video',
+        files: [file]
+      }).then(() => {
+        showFeedback('Video ready to save');
+      }).catch(error => {
+        console.error('Error sharing video:', error);
+        // Fall back to download if sharing fails
+        downloadVideo(blob, fileExt);
+      });
+    } else {
+      // For other platforms, just download
+      downloadVideo(blob, fileExt);
+    }
+  }
+  
+  function downloadVideo(blob, fileExt) {
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.download = 'vastronaut-ar-video-' + new Date().toISOString().replace(/[:\.]/g, '-') + fileExt;
+    link.href = url;
+    link.click();
+    URL.revokeObjectURL(url);
+    showFeedback('Video saved to downloads');
+  }
+  
+  document.addEventListener("DOMContentLoaded", (e) => {
+    let s = location.search.substring(1);
+    let mapId = -1;
+    let token = null;
+
+    if (s.length > 0) {
+      s.split('&').forEach((item, index) => {
+        switch (index) {
+        case 0:
+          mapId = parseInt(item); break;
+        case 1:
+          token = item; break;
+        }
+      });
+    }
+
+    if (mapId !== -1) {
+      immersalParams.mapIds[0] = mapId;
+      console.log("Using map ID from URL:", mapId);
+      statusDisplay.innerText = `Status: Using map ID: ${mapId}`;
+      // Check if the map exists and is valid
+      checkMap(mapId);
+    }
+
+    if (token !== null) {
+      immersalParams.developerToken = token;
+      console.log("Using token from URL");
+    }
+
+    // Add event listeners for the photo and video buttons
+    document.getElementById('photoButton').addEventListener('click', takePhoto);
+    document.getElementById('videoButton').addEventListener('click', toggleVideoRecording);
+    document.getElementById('sharePhotoBtn').addEventListener('click', sharePhoto);
+    document.getElementById('closeModalBtn').addEventListener('click', closePhotoModal);
+    
+    // If it's iOS, update button hint
+    if (isIOS) {
+      document.getElementById('videoButton').title = "Not available on iOS";
+    }
+  });
+
+  // UI functions
+
+  function show(el, box) {
+    document.getElementById(el).style.display = (box.checked) ? "block" : "none";
+  }
+
+  function hide(el, box) {
+    document.getElementById(el).style.display = (box.checked) ? "none" : "none";
+  }
+
+  function toggleLoc(box) {
+    immersal.continuousLocalization = box.checked;
+    locButton.style.display = (box.checked) ? "none" : "block";
+  }
+
+  window.show = show;
+  window.hide = hide;
+  window.toggleLoc = toggleLoc;
+
+  // Add feedback function to show temporary messages to the user
+  function showFeedback(message) {
+    // Create feedback element if it doesn't exist
+    let feedback = document.getElementById('feedbackMessage');
+    if (!feedback) {
+      feedback = document.createElement('div');
+      feedback.id = 'feedbackMessage';
+      feedback.style.cssText = `
+        position: fixed;
+        top: 20px;
+        left: 50%;
+        transform: translateX(-50%);
+        background-color: rgba(0, 0, 0, 0.7);
+        color: white;
+        padding: 8px 16px;
+        border-radius: 20px;
+        font-weight: bold;
+        z-index: 2000;
+        transition: opacity 0.5s;
+      `;
+      document.body.appendChild(feedback);
+    }
+    
+    // Show message
+    feedback.textContent = message;
+    feedback.style.opacity = 1;
+    
+    // Hide after 2 seconds
+    setTimeout(() => {
+      feedback.style.opacity = 0;
+    }, 2000);
+  }
+</script>
+</body>
+</html>
