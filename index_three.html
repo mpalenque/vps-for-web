@@ -346,14 +346,12 @@
 
       // Add event listeners for Immersal events
       immersal.addEventListener('localized', function(e) {
-        console.log("LOCALIZATION EVENT: Localized successfully", e.detail);
-        console.log("LOCALIZATION DATA:", JSON.stringify(e.detail, null, 2));
+        console.log("Localization success event:", e.detail);
         statusDisplay.innerText = "Status: Localized successfully";
       });
       
       immersal.addEventListener('localization-failed', function(e) {
-        console.log("LOCALIZATION EVENT: Localization failed", e.detail);
-        console.log("LOCALIZATION ERROR:", e.detail.error || "unknown error");
+        console.log("Localization failed event:", e.detail);
         statusDisplay.innerText = "Status: Localization failed - " + (e.detail.error || "unknown error");
       });
 
@@ -505,14 +503,12 @@
   locButton.addEventListener("click", function(e) {
     if (immersal) {
       statusDisplay.innerText = "Status: Localizing on device...";
-      console.log("LOCALIZATION: Starting on-device localization manually...");
+      console.log("Starting on-device localization...");
       
       immersal.localizeDeviceAsync()
       .then(result => {
-        console.log(`LOCALIZATION RESULT: On-device localization completed:`, result);
-        console.log("LOCALIZATION DETAIL:", JSON.stringify(result, null, 2));
+        console.log(`[IMMERSAL] On-device localization result:`, result);
         if (result && result.success) {
-          console.log("LOCALIZATION: Successful");
           statusDisplay.innerText = "Status: Localization successful";
           
           // Try to manually update the camera position after localization
@@ -520,24 +516,19 @@
             const pos = immersal.localizeInfo.position;
             const rot = immersal.localizeInfo.rotation;
             
-            console.log("LOCALIZATION: Setting camera to position:", pos);
-            console.log("LOCALIZATION: Setting camera rotation:", rot);
+            console.log("Setting camera to position:", pos);
             camera.position.set(pos.x, pos.y, pos.z);
             camera.quaternion.set(rot.x, rot.y, rot.z, rot.w);
-          } else {
-            console.log("LOCALIZATION: No position/rotation info in localizeInfo");
           }
         } else {
-          console.log("LOCALIZATION: Failed");
           statusDisplay.innerText = "Status: Localization failed";
         }
       })
       .catch(e => {
-        console.error("LOCALIZATION ERROR:", e);
+        console.error("Localization error:", e);
         statusDisplay.innerText = "Status: Localization error - " + e.message;
       });
     } else {
-      console.log("LOCALIZATION: Immersal not initialized");
       statusDisplay.innerText = "Status: Immersal not initialized";
     }
   });
@@ -574,64 +565,51 @@
 
     try {
       if (mapHandle >= 0 && immersal && immersal.continuousLocalization) {
-        console.log("LOCALIZATION: Attempting continuous localization at timestamp", timestamp);
         immersal.localizeDevice(timestamp);
       }
 
       if (immersal && immersal.localization && immersal.localization.counter > 1) {
-        console.log("LOCALIZATION: Using localization data, counter =", immersal.localization.counter);
         camera.fov = immersal.getVFov();
         camera.updateProjectionMatrix();
 
         // Debug print every 1 second
         if (Math.floor(timestamp / 1000) !== Math.floor(prevTime / 1000)) {
-          console.log("LOCALIZATION COUNT:", immersal.localization.counter);
-          console.log("CAMERA POSITION:", JSON.stringify(camera.position));
-          if (immersal.localizeInfo) {
-            console.log("LOCALIZATION INFO:", JSON.stringify(immersal.localizeInfo));
-          }
+          console.log("Localization count:", immersal.localization.counter);
+          console.log("Camera position:", camera.position);
         }
         
         const {position, rotation, elapsedTime, wgs84} = immersal.localizeInfo;
 
         if (immersal.continuousLocalization) {
-          console.log("LOCALIZATION: In continuous mode");
           try {
             const pose = immersal.getEstimatedPose(timestamp);
-            console.log("LOCALIZATION: Estimated pose =", pose ? "Valid" : "Invalid");
             
             if (pose && pose.position && pose.rotation) {
-              console.log("LOCALIZATION: Position =", pose.position);
-              console.log("LOCALIZATION: Rotation =", pose.rotation);
               P.set(pose.position[0], pose.position[1], pose.position[2]);
               Q.set(pose.rotation[0], pose.rotation[1], pose.rotation[2], pose.rotation[3]);
               
               if (immersal.gyroData) {
-                console.log("LOCALIZATION: Using gyro data");
                 QG.set(immersal.gyroData.x, immersal.gyroData.y, immersal.gyroData.z, immersal.gyroData.w);
                 Q.multiply(QG);
               }
 
               if (USE_FILTERING) {
-                console.log("LOCALIZATION: Using position/rotation filtering");
                 let step = 0.025 * dt;
                 if (step > 1.0) step = 1.0;
 
                 camera.position.lerp(P, step);
                 camera.quaternion.slerp(Q, step);
               } else {
-                console.log("LOCALIZATION: Setting position/rotation directly");
                 camera.position.set(P.x, P.y, P.z);
                 camera.quaternion.set(Q.x, Q.y, Q.z, Q.w);
               }
             } else {
-              console.warn("LOCALIZATION: Invalid pose data:", pose);
+              console.warn("Invalid pose data:", pose);
             }
           } catch (err) {
-            console.error("LOCALIZATION ERROR in pose estimation:", err);
+            console.error("Error in pose estimation:", err);
           }
         } else {
-          console.log("LOCALIZATION: Using fixed position");
           P.set(position.x, position.y, position.z);
           Q.set(rotation.x, rotation.y, rotation.z, rotation.w);
           QG.set(immersal.gyroData.x, immersal.gyroData.y, immersal.gyroData.z, immersal.gyroData.w);
@@ -641,7 +619,6 @@
         }
 
         if (wgs84) {
-          console.log("LOCALIZATION: WGS84 coordinates =", wgs84);
           lat.innerHTML = wgs84.latitude.toFixed(5);
           lon.innerHTML = wgs84.longitude.toFixed(5);
           alt.innerHTML = wgs84.altitude.toFixed(5);
@@ -649,7 +626,7 @@
       } else if (immersal && immersal.localization) {
         // No localization yet
         if (Math.floor(timestamp / 5000) !== Math.floor(prevTime / 5000)) {
-          console.log("LOCALIZATION: Waiting for localization, counter:", 
+          console.log("Waiting for localization, counter:", 
             immersal.localization ? immersal.localization.counter : "undefined");
         }
       }
@@ -657,7 +634,7 @@
       updateContent();
       renderer.render(scene, camera);
     } catch (error) {
-      console.error("LOCALIZATION: Render error:", error);
+      console.error("Render error:", error);
     }
   }
 
@@ -1300,8 +1277,6 @@
   }
 
   function toggleLoc(box) {
-    console.log("LOCALIZATION: Continuous localization set to FALSE (disabled)");
-    console.log("LOCALIZATION: Checkbox state =", box.checked);
     immersal.continuousLocalization = false;
     locButton.style.display = (box.checked) ? "none" : "block";
   }
