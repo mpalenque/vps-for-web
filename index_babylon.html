@@ -27,7 +27,7 @@
     <label for="mode2">On-server</label>
   </div>
   <div id="devicelocui" class="form-group">
-    <input type="checkbox" id="contloc" checked onclick="toggleLoc(this)"/>
+    <input type="checkbox" id="contloc" onclick="toggleLoc(this)"/> <!-- Removed 'checked' attribute -->
     <label for="contloc">Continuous localization</label>
     <button id="locButton" class="button">Localize on device</button>
   </div>
@@ -68,7 +68,9 @@
   let pointCloud = null;
   let contentLoaded = false;
   let prevTime = 0;
-  let lastLocalizationTime = 0; // Add variable to track last localization time
+  let manualLocalizationInterval = null; // Add interval variable
+  let lastManualLocalizationTime = 0; // Track last manual localization time
+  let initiallyLocalized = false; // Flag to track if we've been initially localized
 
   const createScene = async () => {
     scene = new BABYLON.Scene(engine);
@@ -93,9 +95,13 @@
     const mapId = immersalParams.mapIds[0];
 
     immersal = await Immersal.Initialize(container, immersalParams);
+    
+    // Start with continuous localization enabled to get initial localization faster
+    immersal.continuousLocalization = true;
+    document.getElementById('contloc').checked = true;
+    locButton.style.display = 'none';
+    
     mapHandle = await immersal.loadMap(mapId);
-
-    //await immersal.freeMap(mapHandle);
 
     createScene(engine).then(scene => {
       const pointCloud = new BABYLON.PointsCloudSystem("PointCloud", 10, scene, {updateable: true});
@@ -117,6 +123,28 @@
       resize();
       immersal.addEventListener('resize', resize);
     });
+  }
+
+  // Function to start automatic manual localization at specified interval
+  const startAutomaticManualLocalization = (intervalMs) => {
+    // Clear any existing interval
+    if (manualLocalizationInterval) {
+      clearInterval(manualLocalizationInterval);
+    }
+    
+    // Set new interval that triggers manual localization
+    manualLocalizationInterval = setInterval(() => {
+      if (immersal && !immersal.continuousLocalization) {
+        immersal.localizeDeviceAsync()
+          .then(result => {
+            console.log(`[IMMERSAL] Auto manual localization result:`, result);
+            lastManualLocalizationTime = performance.now();
+          })
+          .catch(e => {
+            console.log(e);
+          });
+      }
+    }, intervalMs);
   }
 
   permButton.addEventListener("click", function(e) {
@@ -159,10 +187,22 @@
     const dt = timestamp - prevTime;
     prevTime = timestamp;
 
-    // Only localize every 3 seconds (3000 milliseconds)
-    if (mapHandle >= 0 && immersal.continuousLocalization && (timestamp - lastLocalizationTime > 3000)) {
+    if (mapHandle >= 0 && immersal.continuousLocalization) {
       immersal.localizeDevice(timestamp);
-      lastLocalizationTime = timestamp; // Update the last localization time
+    }
+
+    // Check if we've been initially localized
+    if (!initiallyLocalized && immersal && immersal.localization.counter > 1) {
+      initiallyLocalized = true;
+      console.log("[IMMERSAL] Initial localization complete, switching to periodic manual localization");
+      
+      // Switch to manual mode after initial localization
+      immersal.continuousLocalization = false;
+      document.getElementById('contloc').checked = false;
+      locButton.style.display = 'block';
+      
+      // Start automatic manual localization
+      startAutomaticManualLocalization(1000);
     }
 
     if (immersal.localization.counter > 1) {
@@ -286,6 +326,16 @@
   function toggleLoc(box) {
     immersal.continuousLocalization = box.checked;
     locButton.style.display = (box.checked) ? "none" : "block";
+    
+    // If switching back to manual mode, make sure our interval is running
+    if (!box.checked && initiallyLocalized && !manualLocalizationInterval) {
+      startAutomaticManualLocalization(1000);
+    }
+    // If switching to continuous mode, clear the interval
+    else if (box.checked && manualLocalizationInterval) {
+      clearInterval(manualLocalizationInterval);
+      manualLocalizationInterval = null;
+    }
   }
 
   window.show = show;
