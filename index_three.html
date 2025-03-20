@@ -932,8 +932,8 @@
       }
     
       attributes.size.needsUpdate = true;
-      // Make sure point cloud stays hidden even after updates
-      if (pointCloud) pointCloud.visible = false;
+      // Make point cloud visible like in the Babylon implementation
+      if (pointCloud) pointCloud.visible = true;
     }  
   }
 
