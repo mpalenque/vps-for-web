@@ -4,7 +4,7 @@ export const immersalParams = {
     continuousLocalization: true,
     continuousInterval: 16, // ms
     imageDownScale: .75,
-    solverType: 1,
+    solverType: 0,
     /* DEBUG with fixed focal length 5
     deviceData: {
       model: "Apple MacBook Pro",5
