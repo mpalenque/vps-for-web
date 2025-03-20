@@ -42,7 +42,7 @@
   import { Immersal, createOrientationSensor } from './js/immersal.js';
 
   const USE_FILTERING = true;
-  const AUTO_LOCALIZE_INTERVAL = 500; // 500ms = half a second
+  const AUTO_LOCALIZE_INTERVAL = 3000; // 3 seconds
 
   const container = document.getElementById("container");
   const canvas = document.getElementById("renderCanvas");
@@ -70,6 +70,7 @@
   let contentLoaded = false;
   let prevTime = 0;
   let autoLocalizeTimer = null;
+  let isManualMode = true; // Flag to track manual mode
 
   const createScene = async () => {
     scene = new BABYLON.Scene(engine);
@@ -96,13 +97,15 @@
     immersal = await Immersal.Initialize(container, immersalParams);
     mapHandle = await immersal.loadMap(mapId);
 
-    // Initialize in manual mode
+    // Explicitly set to manual mode
+    document.getElementById('contloc').checked = false;
     immersal.continuousLocalization = false;
+    isManualMode = true;
     locButton.style.display = "block";
     
-    // Start automatic localization every half second
-    startAutoLocalization();
-
+    // Force layout update
+    document.getElementById('devicelocui').style.display = "block";
+    
     createScene(engine).then(scene => {
       const pointCloud = new BABYLON.PointsCloudSystem("PointCloud", 10, scene, {updateable: true});
       scene.onReadyObservable.add(() => {
@@ -122,23 +125,33 @@
       
       resize();
       immersal.addEventListener('resize', resize);
+
+      // Start the automatic localization timer after scene is ready
+      setTimeout(() => {
+        console.log("Starting auto-localization timer");
+        startAutoLocalization();
+      }, 1000);
     });
   }
 
   // Function to start automatic localization
   const startAutoLocalization = () => {
+    console.log("Auto localization started");
+    
     if (autoLocalizeTimer) {
       clearInterval(autoLocalizeTimer);
+      autoLocalizeTimer = null;
     }
     
     autoLocalizeTimer = setInterval(() => {
-      if (immersal && !immersal.continuousLocalization) {
+      if (immersal && isManualMode && !immersal.continuousLocalization) {
+        console.log("Auto triggering localization");
         immersal.localizeDeviceAsync()
         .then(result => {
           console.log(`[IMMERSAL] Auto on-device localization result:`, result);
         })
         .catch(e => {
-          console.log(e);
+          console.log("Auto localization error:", e);
         });
       }
     }, AUTO_LOCALIZE_INTERVAL);
@@ -314,19 +327,31 @@
   }
 
   function toggleLoc(box) {
+    console.log("Toggle localization mode:", box.checked);
     immersal.continuousLocalization = box.checked;
+    isManualMode = !box.checked;
     locButton.style.display = (box.checked) ? "none" : "block";
     
     // Start or stop auto-localization based on continuous mode
     if (box.checked) {
+      console.log("Stopping auto-localization timer");
       if (autoLocalizeTimer) {
         clearInterval(autoLocalizeTimer);
         autoLocalizeTimer = null;
       }
     } else {
+      console.log("Restarting auto-localization timer");
       startAutoLocalization();
     }
   }
+
+  // Make sure auto localization starts when the page is fully loaded
+  window.addEventListener('load', () => {
+    if (immersal && isManualMode) {
+      console.log("Window loaded, ensuring auto-localization is running");
+      startAutoLocalization();
+    }
+  });
 
   window.show = show;
   window.hide = hide;
