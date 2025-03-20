@@ -68,6 +68,7 @@
   let pointCloud = null;
   let contentLoaded = false;
   let prevTime = 0;
+  let lastLocalizationTime = 0; // Add variable to track last localization time
 
   const createScene = async () => {
     scene = new BABYLON.Scene(engine);
@@ -158,8 +159,10 @@
     const dt = timestamp - prevTime;
     prevTime = timestamp;
 
-    if (mapHandle >= 0 && immersal.continuousLocalization) {
+    // Only localize every 3 seconds (3000 milliseconds)
+    if (mapHandle >= 0 && immersal.continuousLocalization && (timestamp - lastLocalizationTime > 3000)) {
       immersal.localizeDevice(timestamp);
+      lastLocalizationTime = timestamp; // Update the last localization time
     }
 
     if (immersal.localization.counter > 1) {
