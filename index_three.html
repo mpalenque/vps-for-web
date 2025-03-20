@@ -663,7 +663,7 @@
       pointCloud = new THREE.Points(geometry, material);
       pointCloud.scale.set(1, 1, 1);
       // Hide the point cloud while keeping the functionality
-      pointCloud.visible = false;
+      pointCloud.visible = true;
       scene.add(pointCloud);
       plyLoaded = true;
       console.log(`PLY loaded`);
