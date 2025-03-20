@@ -119,16 +119,9 @@
   }
 
   permButton.addEventListener("click", function(e) {
-    createOrientationSensor().then((success) => {
-      if (success !== false) {
-        permButton.style.visibility = "hidden";
-        init();
-      } else {
-        alert("Motion and orientation sensor permissions are required for tracking. Please allow permissions and try again.");
-      }
-    }).catch(error => {
-      console.error("Error initializing sensors:", error);
-      alert("Failed to initialize motion sensors. Please ensure you're using a device with motion sensors and try again.");
+    createOrientationSensor().then(() => {
+      permButton.style.visibility = "hidden";
+      init();
     });
   });
 
