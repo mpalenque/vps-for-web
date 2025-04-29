@@ -677,6 +677,28 @@
     // Define vastmask path
     let vastMaskPath = './assets/vastmask.glb';
 
+    // Create a cube and add it to the center of the scene
+    const geometry = new THREE.BoxGeometry(0.5, 0.5, 0.5);
+    const material = new THREE.MeshStandardMaterial({ 
+      color: 0x00ff00,
+      metalness: 0.5,
+      roughness: 0.1
+    });
+    const cube = new THREE.Mesh(geometry, material);
+    cube.position.set(0, 0, -1.5); // Position it slightly in front of the user
+    cube.name = "centerCube";
+    scene.add(cube);
+    console.log("Added cube to scene center");
+    
+    // Animate the cube by adding it to the update loop
+    window.animateCube = function(dt) {
+      const cubeObj = scene.getObjectByName("centerCube");
+      if (cubeObj) {
+        cubeObj.rotation.x += dt * 0.5;
+        cubeObj.rotation.y += dt * 0.7;
+      }
+    };
+
     new THREE.RGBELoader()
       .setPath('./assets/')
       .load('palermo_1k.hdr', function(texture) {
@@ -884,6 +906,9 @@
     let t = clock.getElapsedTime();
     if (vastMixer) vastMixer.update(dt);
     if (signVastMixer) signVastMixer.update(dt);
+    
+    // Animate the cube
+    if (window.animateCube) window.animateCube(dt);
     
     // Check if vastModel exists and make sure it's visible
     if (vastModel) {
