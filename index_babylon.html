@@ -82,8 +82,15 @@
     const environ = BABYLON.CubeTexture.CreateFromPrefilteredData("./assets/palermo.env", scene);
     scene.environmentTexture = environ;
 
-    const {meshes} = await BABYLON.SceneLoader.ImportMeshAsync(undefined, "./assets/", "immersal_LOGO.glb", scene);
-    logo = meshes.find((mesh) => mesh.name === "immersal");
+    const {meshes} = await BABYLON.SceneLoader.ImportMeshAsync(undefined, "./assets/", "model.glb", scene);
+    logo = meshes[0]; // Store the root mesh of the model.glb instead of looking for "immersal"
+    
+    // Optional: Position or scale the model if needed
+    if (logo) {
+      logo.scaling = new BABYLON.Vector3(1, 1, 1);
+      logo.position = new BABYLON.Vector3(0, 0, -2);
+      console.log("Model loaded successfully:", logo.name);
+    }
 
     return scene;
   }
@@ -298,3 +305,4 @@
 </script>
 </body>
 </html>
+``` 
