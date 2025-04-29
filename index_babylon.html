@@ -13,9 +13,40 @@
 <script src="https://cdn.babylonjs.com/babylon.js"></script>
 <script src="https://cdn.babylonjs.com/loaders/babylonjs.loaders.js"></script>
 <script src="js/babylon/plyLoader.js"></script>
+<!-- VRM Loader para Babylon.js -->
+<script src="https://cdn.jsdelivr.net/npm/@babylonjs/loaders/babylonjs.loaders.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/babylon-vrm-loader/dist/babylon-vrm-loader.js"></script>
+<style>
+  #loading-overlay {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background-color: rgba(237, 239, 241, 0.9);
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    align-items: center;
+    z-index: 1000;
+    transition: opacity 0.5s ease-out;
+  }
+  #loading-text {
+    font-family: Arial, sans-serif;
+    font-size: 18px;
+    color: #FF4500;
+    font-weight: 600;
+    margin-top: 20px;
+  }
+</style>
 </head>
 
 <body>
+<!-- Loading overlay -->
+<div id="loading-overlay">
+  <div id="loading-text">Cargando modelo Snoo...</div>
+</div>
+
 <div id="container">
   <canvas id="renderCanvas"></canvas>
 </div>
@@ -68,6 +99,12 @@
   let pointCloud = null;
   let contentLoaded = false;
   let prevTime = 0;
+  
+  // Variables para el modelo VRM
+  let vrmModel = null;
+  let vrmAnimationMixer = null;
+  let vrmAnimations = [];
+  let loadingOverlay = document.getElementById("loading-overlay");
 
   const createScene = async () => {
     scene = new BABYLON.Scene(engine);
@@ -82,6 +119,9 @@
     const environ = BABYLON.CubeTexture.CreateFromPrefilteredData("./assets/palermo.env", scene);
     scene.environmentTexture = environ;
 
+    // Cargar el modelo VRM
+    await loadVRMModel();
+
     const {meshes} = await BABYLON.SceneLoader.ImportMeshAsync(undefined, "./assets/", "model.glb", scene);
     logo = meshes[0]; // Store the root mesh of the model.glb instead of looking for "immersal"
     
@@ -93,6 +133,67 @@
     }
 
     return scene;
+  }
+  
+  // Función para cargar el modelo VRM
+  const loadVRMModel = async () => {
+    try {
+      // Actualizar el texto de carga
+      document.getElementById("loading-text").innerText = "Cargando modelo Snoo...";
+      
+      // Cargar el modelo VRM usando el plugin de VRM para Babylon
+      const result = await BABYLON.SceneLoader.ImportMeshAsync("", "./js/", "finalsnoo.vrm", scene);
+      vrmModel = result.meshes[0];
+      
+      // Posicionar el modelo VRM en el origen (0,0,0)
+      vrmModel.position = new BABYLON.Vector3(0, 0, 0);
+      vrmModel.rotation = new BABYLON.Vector3(0, 0, 0);
+      
+      // Registrar el modelo para que se actualice y animate con la animación
+      await loadVRMAnimations();
+      
+      console.log("VRM model loaded successfully");
+      
+      // Ocultar el overlay de carga cuando el modelo esté completamente cargado
+      loadingOverlay.style.opacity = "0";
+      setTimeout(() => {
+        loadingOverlay.style.display = "none";
+      }, 500);
+      
+    } catch (error) {
+      console.error("Error loading VRM model:", error);
+      document.getElementById("loading-text").innerText = "Error al cargar el modelo";
+    }
+  }
+  
+  // Función para cargar y configurar animaciones
+  const loadVRMAnimations = async () => {
+    try {
+      document.getElementById("loading-text").innerText = "Cargando animaciones...";
+      
+      // Cargar archivo FBX con las animaciones
+      const result = await BABYLON.SceneLoader.ImportAnimationsAsync("", "./js/", "dance.fbx", scene, false, BABYLON.SceneLoaderAnimationGroupLoadingMode.Clean);
+      
+      if (result && result.animationGroups && result.animationGroups.length > 0) {
+        vrmAnimations = result.animationGroups;
+        
+        // Crear un mixer de animación y aplicarlo al modelo VRM
+        vrmAnimationMixer = new BABYLON.AnimationGroup("vrmMixer", scene);
+        
+        // Aplicar la primera animación por defecto (si existe)
+        if (vrmAnimations.length > 0) {
+          vrmAnimations[0].targetedAnimations.forEach((targetedAnimation) => {
+            vrmAnimationMixer.addTargetedAnimation(targetedAnimation.animation, targetedAnimation.target);
+          });
+          
+          vrmAnimationMixer.play(true); // Comenzar la animación en loop
+        }
+        
+        console.log("VRM animations loaded successfully");
+      }
+    } catch (error) {
+      console.error("Error loading animations:", error);
+    }
   }
 
   const init = async () => {
@@ -171,6 +272,11 @@
     const timestamp = performance.now();
     const dt = timestamp - prevTime;
     prevTime = timestamp;
+    
+    // Actualizar animaciones VRM si están disponibles
+    if (vrmAnimationMixer) {
+      vrmAnimationMixer.animate(scene.getAnimationRatio());
+    }
 
     if (mapHandle >= 0 && immersal.continuousLocalization) {
       immersal.localizeDevice(timestamp);
@@ -305,4 +411,3 @@
 </script>
 </body>
 </html>
-``` 
