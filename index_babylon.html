@@ -119,8 +119,7 @@
     const environ = BABYLON.CubeTexture.CreateFromPrefilteredData("./assets/palermo.env", scene);
     scene.environmentTexture = environ;
 
-    // Cargar el modelo VRM
-    await loadVRMModel();
+    // Nota: No cargamos el modelo VRM aquí para evitar bloquear la inicialización
 
     const {meshes} = await BABYLON.SceneLoader.ImportMeshAsync(undefined, "./assets/", "model.glb", scene);
     logo = meshes[0]; // Store the root mesh of the model.glb instead of looking for "immersal"
@@ -141,18 +140,41 @@
       // Actualizar el texto de carga
       document.getElementById("loading-text").innerText = "Cargando modelo Snoo...";
       
-      // Cargar el modelo VRM usando el plugin de VRM para Babylon
-      const result = await BABYLON.SceneLoader.ImportMeshAsync("", "./js/", "finalsnoo.vrm", scene);
+      // Verificar si el plugin VRM está disponible
+      if (!BABYLON.SceneLoader.IsPluginForExtensionAvailable('.vrm')) {
+        console.error("No se encontró el plugin VRM. Intentando registrar...");
+        // Intentar registrar el plugin VRM si está disponible
+        if (window.BABYLON_VRM_LOADER) {
+          window.BABYLON_VRM_LOADER.VRMFileLoader.RegisterExtension(BABYLON.SceneLoader);
+          console.log("Plugin VRM registrado manualmente");
+        } else {
+          throw new Error("Plugin VRM no disponible");
+        }
+      }
+      
+      // Establecemos un timeout para que si el modelo no carga en 15 segundos, continue la experiencia
+      const timeoutPromise = new Promise((_, reject) => {
+        setTimeout(() => reject(new Error("Timeout loading VRM model")), 15000);
+      });
+      
+      // Cargar el modelo VRM usando el plugin de VRM para Babylon con un timeout de seguridad
+      const modelPromise = BABYLON.SceneLoader.ImportMeshAsync("", "./js/", "finalsnoo.vrm", scene);
+      
+      // Competimos entre el timeout y la carga del modelo
+      const result = await Promise.race([modelPromise, timeoutPromise]);
+      
+      // Si llegamos aquí, el modelo cargó correctamente
       vrmModel = result.meshes[0];
       
       // Posicionar el modelo VRM en el origen (0,0,0)
       vrmModel.position = new BABYLON.Vector3(0, 0, 0);
       vrmModel.rotation = new BABYLON.Vector3(0, 0, 0);
-      
-      // Registrar el modelo para que se actualice y animate con la animación
-      await loadVRMAnimations();
+      vrmModel.scaling = new BABYLON.Vector3(1, 1, 1);
       
       console.log("VRM model loaded successfully");
+      
+      // Registrar el modelo para que se actualice y anime con la animación
+      await loadVRMAnimations();
       
       // Ocultar el overlay de carga cuando el modelo esté completamente cargado
       loadingOverlay.style.opacity = "0";
@@ -160,9 +182,18 @@
         loadingOverlay.style.display = "none";
       }, 500);
       
+      return true;
     } catch (error) {
       console.error("Error loading VRM model:", error);
       document.getElementById("loading-text").innerText = "Error al cargar el modelo";
+      
+      // Asegurarse de que el overlay se oculte incluso si hay un error
+      loadingOverlay.style.opacity = "0";
+      setTimeout(() => {
+        loadingOverlay.style.display = "none";
+      }, 500);
+      
+      return false;
     }
   }
   
@@ -171,8 +202,16 @@
     try {
       document.getElementById("loading-text").innerText = "Cargando animaciones...";
       
+      // Establecemos un timeout para que si las animaciones no cargan en 10 segundos, continue la experiencia
+      const timeoutPromise = new Promise((_, reject) => {
+        setTimeout(() => reject(new Error("Timeout loading animations")), 10000);
+      });
+      
       // Cargar archivo FBX con las animaciones
-      const result = await BABYLON.SceneLoader.ImportAnimationsAsync("", "./js/", "dance.fbx", scene, false, BABYLON.SceneLoaderAnimationGroupLoadingMode.Clean);
+      const animationPromise = BABYLON.SceneLoader.ImportAnimationsAsync("", "./js/", "dance.fbx", scene, false, BABYLON.SceneLoaderAnimationGroupLoadingMode.Clean);
+      
+      // Competimos entre el timeout y la carga de animaciones
+      const result = await Promise.race([animationPromise, timeoutPromise]);
       
       if (result && result.animationGroups && result.animationGroups.length > 0) {
         vrmAnimations = result.animationGroups;
@@ -181,18 +220,29 @@
         vrmAnimationMixer = new BABYLON.AnimationGroup("vrmMixer", scene);
         
         // Aplicar la primera animación por defecto (si existe)
-        if (vrmAnimations.length > 0) {
-          vrmAnimations[0].targetedAnimations.forEach((targetedAnimation) => {
-            vrmAnimationMixer.addTargetedAnimation(targetedAnimation.animation, targetedAnimation.target);
-          });
-          
-          vrmAnimationMixer.play(true); // Comenzar la animación en loop
+        if (vrmAnimations.length > 0 && vrmModel) {
+          // Intenta aplicar la animación al modelo VRM
+          try {
+            vrmAnimations[0].targetedAnimations.forEach((targetedAnimation) => {
+              vrmAnimationMixer.addTargetedAnimation(targetedAnimation.animation, targetedAnimation.target);
+            });
+            
+            vrmAnimationMixer.play(true); // Comenzar la animación en loop
+            console.log("VRM animations applied successfully");
+          } catch (animError) {
+            console.error("Error applying animation to VRM model:", animError);
+          }
         }
         
         console.log("VRM animations loaded successfully");
+        return true;
+      } else {
+        console.warn("No animation groups found in FBX file");
+        return false;
       }
     } catch (error) {
       console.error("Error loading animations:", error);
+      return false;
     }
   }
 
@@ -223,6 +273,17 @@
       
       resize();
       immersal.addEventListener('resize', resize);
+      
+      // Intentar cargar el modelo VRM después de inicializar la escena principal
+      // De esta forma, si falla, no afectará la funcionalidad básica de AR
+      loadVRMModel().catch(error => {
+        console.error("Error loading VRM model:", error);
+        // Ocultar el overlay incluso si hay error para no bloquear la experiencia
+        loadingOverlay.style.opacity = "0";
+        setTimeout(() => {
+          loadingOverlay.style.display = "none";
+        }, 500);
+      });
     });
   }
 
