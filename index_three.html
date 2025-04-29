@@ -15,6 +15,9 @@
 <script src="//cdn.jsdelivr.net/gh/mrdoob/three.js@r123/examples/js/loaders/GLTFLoader.js"></script>
 <script src="//cdn.jsdelivr.net/gh/mrdoob/three.js@r123/examples/js/loaders/DRACOLoader.js"></script>
 <script src="//cdn.jsdelivr.net/gh/mrdoob/three.js@r123/examples/js/loaders/RGBELoader.js"></script>
+<script src="//cdn.jsdelivr.net/gh/mrdoob/three.js@r123/examples/js/loaders/FBXLoader.js"></script>
+<!-- VRM Loader para Three.js -->
+<script src="https://unpkg.com/@pixiv/three-vrm@0.6.11/lib/three-vrm.js"></script>
 <style>
   /* Hide debug UI elements */
   #uicontainer, #latlon, #locStatus {
@@ -299,7 +302,7 @@
   let camera, scene, renderer, clock, pcgeo;
   let vastModel, vastMixer;
   let signVastModel, signVastMixer;
-  let vastMaskModel; // Fixed the syntax error: removed "l;"
+  let vastMaskModel;
   let immersal;
   let mapHandle = -1;
   let pointCloud = null;
@@ -315,6 +318,12 @@
   let captureCanvas = null;
   let captureContext = null;
   let cameraVideoElement = null;
+  
+  // Variables para el modelo VRM
+  let vrmModel = null;
+  let vrmMixer = null;
+  let vrmAnimations = [];
+  let vrmLoaded = false;
 
   const init = async () => {
     const mapId = immersalParams.mapIds[0];
@@ -673,10 +682,18 @@
   function loadContent() {
     let vastPath = './assets/vast.glb';
     let signVastPath = './assets/signvast.glb';
-    
-    // Define vastmask path
     let vastMaskPath = './assets/vastmask.glb';
+    
+    // Ruta al modelo VRM de Reddit Snoo
+    let vrmPath = './js/finalsnoo.vrm';
 
+    // Cargar el modelo VRM (Snoo de Reddit)
+    console.log("Starting to load VRM model from:", vrmPath);
+    statusDisplay.innerText = "Status: Loading VRM model...";
+    
+    // Función específica para cargar el modelo VRM usando Three.VRM
+    loadVRMModel(vrmPath);
+    
     // Create a cube and add it to the center of the scene
     const geometry = new THREE.BoxGeometry(0.5, 0.5, 0.5);
     const material = new THREE.MeshStandardMaterial({ 
@@ -906,9 +923,22 @@
     let t = clock.getElapsedTime();
     if (vastMixer) vastMixer.update(dt);
     if (signVastMixer) signVastMixer.update(dt);
+    if (vrmMixer) vrmMixer.update(dt); // Actualizar animaciones del modelo VRM
+    
+    // Animar el modelo VRM si está disponible
+    if (window.animateVRM) window.animateVRM(dt);
     
     // Animate the cube
     if (window.animateCube) window.animateCube(dt);
+    
+    // Check if vrmModel exists and make sure it's visible
+    if (vrmModel && !vrmModel.visible) {
+      console.log("Restoring VRM model visibility");
+      vrmModel.visible = true;
+      vrmModel.traverse(node => {
+        if (node.isMesh) node.visible = true;
+      });
+    }
     
     // Check if vastModel exists and make sure it's visible
     if (vastModel) {
@@ -981,6 +1011,198 @@
         console.error("Map check error:", error);
         statusDisplay.innerText = "Status: Map check error";
       });
+  }
+
+  // Función para cargar y configurar el modelo VRM con Three.js
+  function loadVRMModel(vrmPath) {
+    // Verificar que THREE.GLTFLoader esté disponible
+    if (!THREE.GLTFLoader) {
+      console.error("THREE.GLTFLoader not available");
+      statusDisplay.innerText = "Status: Error - THREE.GLTFLoader not available";
+      return;
+    }
+
+    // Crear un loader de GLTF
+    const loader = new THREE.GLTFLoader();
+
+    // Registrar plugin VRM si está disponible
+    if (window.THREE && window.THREE.VRM && window.THREE.VRM.VRMLoader) {
+      console.log("Registering VRM plugin for GLTFLoader");
+      THREE.VRMLoader.register(loader);
+    } else if (window.THREE && window.THREE.VRM) {
+      console.log("Using THREE.VRM directly");
+    } else {
+      console.warn("THREE.VRM plugin not found - trying to load as regular GLTF");
+    }
+
+    // Cargar el modelo VRM
+    loader.load(
+      // URL del modelo VRM
+      vrmPath,
+      // Callback de éxito - cuando se carga el modelo
+      function(gltf) {
+        console.log("VRM model loaded successfully:", gltf);
+        
+        // Si estamos usando la biblioteca THREE.VRM, parseamos el modelo
+        if (window.THREE && window.THREE.VRM && window.THREE.VRM.from) {
+          // Convertir el modelo GLTF a VRM
+          THREE.VRM.from(gltf).then(vrm => {
+            console.log("VRM model parsed successfully:", vrm);
+            vrmModel = vrm.scene;
+            
+            // Posicionar el modelo VRM en el origen (0,0,0)
+            vrmModel.position.set(0, 0, 0);
+            vrmModel.rotation.set(0, 0, 0);
+            vrmModel.scale.set(1, 1, 1);
+            
+            // Añadir el modelo a la escena
+            scene.add(vrmModel);
+            console.log("VRM model added to scene at position:", vrmModel.position);
+            
+            // Cargar animaciones FBX para el modelo VRM
+            loadVRMAnimations();
+            
+            vrmLoaded = true;
+            statusDisplay.innerText = "Status: VRM model loaded successfully";
+          }).catch(error => {
+            console.error("Error parsing VRM:", error);
+            // Intentar añadir el modelo directamente como GLTF si falla el parsing VRM
+            fallbackGLTFLoad(gltf);
+          });
+        } else {
+          // Si no tenemos la biblioteca VRM específica, intentamos cargar como GLTF normal
+          fallbackGLTFLoad(gltf);
+        }
+      },
+      // Callback de progreso
+      function(xhr) {
+        const percent = Math.floor((xhr.loaded / xhr.total) * 100);
+        console.log('VRM loading: ' + percent + '%');
+        statusDisplay.innerText = `Status: Loading VRM model: ${percent}%`;
+      },
+      // Callback de error
+      function(error) {
+        console.error('Error loading VRM:', error);
+        statusDisplay.innerText = `Status: Error loading VRM model: ${error.message}`;
+      }
+    );
+  }
+  
+  // Función para cargar como GLTF si falla el parsing VRM
+  function fallbackGLTFLoad(gltf) {
+    console.log("Using fallback GLTF loading for VRM");
+    vrmModel = gltf.scene;
+    
+    // Posicionar el modelo en el origen (0,0,0)
+    vrmModel.position.set(0, 0, 0);
+    vrmModel.rotation.set(0, 0, 0);
+    vrmModel.scale.set(1, 1, 1);
+    
+    // Asegurarse de que todos los materiales sean visibles
+    vrmModel.traverse(node => {
+      if (node.isMesh) {
+        node.frustumCulled = false;
+        node.material.side = THREE.DoubleSide;
+        node.material.transparent = true;
+        node.material.needsUpdate = true;
+        node.visible = true;
+      }
+    });
+    
+    // Añadir a la escena
+    scene.add(vrmModel);
+    console.log("VRM model added to scene as regular GLTF");
+    
+    // Cargar animaciones FBX para el modelo
+    loadVRMAnimations();
+    
+    vrmLoaded = true;
+    statusDisplay.innerText = "Status: VRM model loaded as GLTF";
+  }
+  
+  // Función para cargar y aplicar animaciones al modelo VRM
+  function loadVRMAnimations() {
+    // Verificar si se cargó el modelo antes de cargar las animaciones
+    if (!vrmModel) {
+      console.error("Cannot load animations - VRM model not loaded");
+      return;
+    }
+    
+    // Añadir animación básica para demostración
+    addBasicAnimation();
+    
+    // Intentar cargar archivo FBX con animaciones
+    if (THREE.FBXLoader) {
+      try {
+        statusDisplay.innerText = "Status: Loading VRM animations...";
+        const fbxLoader = new THREE.FBXLoader();
+        
+        fbxLoader.load(
+          // URL del archivo de animaciones
+          './js/dance.fbx',
+          // Callback de éxito
+          function(fbx) {
+            console.log("FBX animation file loaded:", fbx);
+            
+            // Crear mixer para las animaciones
+            vrmMixer = new THREE.AnimationMixer(vrmModel);
+            
+            // Obtener las animaciones del archivo FBX
+            if (fbx.animations && fbx.animations.length > 0) {
+              vrmAnimations = fbx.animations;
+              console.log(`Found ${vrmAnimations.length} animations in FBX`);
+              
+              // Aplicar la primera animación
+              if (vrmAnimations.length > 0) {
+                const action = vrmMixer.clipAction(vrmAnimations[0]);
+                action.play();
+                console.log("Started VRM animation");
+              }
+            }
+            
+            statusDisplay.innerText = "Status: VRM animations loaded";
+          },
+          // Callback de progreso
+          function(xhr) {
+            console.log(`FBX animation loading: ${Math.floor(xhr.loaded / xhr.total * 100)}%`);
+          },
+          // Callback de error
+          function(error) {
+            console.error("Error loading FBX animations:", error);
+            statusDisplay.innerText = `Status: Error loading FBX animations: ${error.message}`;
+          }
+        );
+      } catch (error) {
+        console.error("Error in FBX animation loading:", error);
+      }
+    } else {
+      console.warn("THREE.FBXLoader not available, skipping animation loading");
+    }
+  }
+  
+  // Añadir animación básica de rotación y movimiento
+  function addBasicAnimation() {
+    // Crear una animación simple que haga girar el modelo
+    window.animateVRM = function(dt) {
+      if (vrmModel && vrmLoaded) {
+        // Oscilación leve en Y (arriba y abajo)
+        const time = Date.now() * 0.001; // Tiempo en segundos
+        const yPos = Math.sin(time) * 0.05; // Oscilación de ±5cm
+        
+        // Aplicar posición Y con oscilación
+        vrmModel.position.y = yPos;
+        
+        // Rotación muy lenta en el eje Y
+        vrmModel.rotation.y += dt * 0.1; // Velocidad de rotación lenta
+      }
+    };
+    
+    // Actualizar el mixer si existe
+    if (vrmMixer) {
+      window.updateVRMMixer = function(dt) {
+        vrmMixer.update(dt);
+      };
+    }
   }
 
   // Photo and video recording functions

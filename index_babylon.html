@@ -13,9 +13,8 @@
 <script src="https://cdn.babylonjs.com/babylon.js"></script>
 <script src="https://cdn.babylonjs.com/loaders/babylonjs.loaders.js"></script>
 <script src="js/babylon/plyLoader.js"></script>
-<!-- Cambiar a las librerías Three.js para VRM, que tienen mejor compatibilidad -->
-<script src="https://unpkg.com/three@0.150.0/build/three.min.js"></script>
-<script src="https://unpkg.com/@pixiv/three-vrm@1.0.9/lib/three-vrm.min.js"></script>
+<!-- Librerías para VRM más específicas y compatibles con Babylon.js -->
+<script src="https://cdn.jsdelivr.net/npm/babylon-vrm-loader@1.4.1/dist/babylonjs-vrm.min.js"></script>
 <script src="https://cdn.babylonjs.com/babylon.glTFFileLoader.js"></script>
 <style>
   #loading-overlay {
@@ -206,31 +205,56 @@
   const createSimpleAnimation = () => {
     if (!vrmModel) return;
     
-    // Crear una animación simple que haga girar o mover ligeramente el modelo
-    const animation = new BABYLON.Animation(
-      "vrmAnimation",
-      "rotation.y",
-      30, // 30 FPS
-      BABYLON.Animation.ANIMATIONTYPE_FLOAT,
-      BABYLON.Animation.ANIMATIONLOOPMODE_CYCLE
-    );
-    
-    // Definir los keyframes para la animación
-    const keyFrames = [];
-    keyFrames.push({ frame: 0, value: 0 });
-    keyFrames.push({ frame: 100, value: Math.PI / 4 }); // girar 45 grados
-    keyFrames.push({ frame: 200, value: 0 });
-    
-    // Asignar los keyframes a la animación
-    animation.setKeys(keyFrames);
-    
-    // Adjuntar la animación al modelo
-    vrmModel.animations = [animation];
-    
-    // Comenzar la animación
-    scene.beginAnimation(vrmModel, 0, 200, true);
-    
-    console.log("Animación simple aplicada al modelo VRM");
+    // Aplicar una animación más sofisticada al modelo VRM
+    try {
+      // Crear una animación de rotación
+      const rotationAnimation = new BABYLON.Animation(
+        "vrmRotation",
+        "rotation.y",
+        30, // 30 FPS
+        BABYLON.Animation.ANIMATIONTYPE_FLOAT,
+        BABYLON.Animation.ANIMATIONLOOPMODE_CYCLE
+      );
+      
+      // Definir los keyframes para la animación de rotación
+      const rotationKeyFrames = [];
+      rotationKeyFrames.push({ frame: 0, value: 0 });
+      rotationKeyFrames.push({ frame: 100, value: Math.PI / 8 }); // Rotación suave de 45 grados
+      rotationKeyFrames.push({ frame: 200, value: 0 });
+      
+      // Asignar los keyframes a la animación
+      rotationAnimation.setKeys(rotationKeyFrames);
+      
+      // Crear una animación de posición (ligero movimiento vertical)
+      const positionAnimation = new BABYLON.Animation(
+        "vrmPosition",
+        "position.y",
+        30, // 30 FPS
+        BABYLON.Animation.ANIMATIONTYPE_FLOAT,
+        BABYLON.Animation.ANIMATIONLOOPMODE_CYCLE
+      );
+      
+      // Definir los keyframes para la animación de posición
+      const positionKeyFrames = [];
+      positionKeyFrames.push({ frame: 0, value: 0 });
+      positionKeyFrames.push({ frame: 50, value: 0.05 }); // Pequeño movimiento hacia arriba
+      positionKeyFrames.push({ frame: 100, value: 0 });
+      positionKeyFrames.push({ frame: 150, value: -0.05 }); // Pequeño movimiento hacia abajo
+      positionKeyFrames.push({ frame: 200, value: 0 });
+      
+      // Asignar los keyframes a la animación
+      positionAnimation.setKeys(positionKeyFrames);
+      
+      // Adjuntar las animaciones al modelo
+      vrmModel.animations = [rotationAnimation, positionAnimation];
+      
+      // Comenzar la animación con loop
+      scene.beginAnimation(vrmModel, 0, 200, true);
+      
+      console.log("Animaciones aplicadas al modelo VRM");
+    } catch (error) {
+      console.error("Error al aplicar animaciones al modelo VRM:", error);
+    }
   }
   
   // Simplificar la función de carga de animaciones
